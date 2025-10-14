@@ -237,6 +237,14 @@
     function cerrarSesion() {
       window.location.href = '/logout';
     }
+    // Escuchar cuando se actualiza el perfil desde el iframe
+    window.addEventListener('message', (event) => {
+    if (event.data.type === 'perfilActualizado') {
+        document.getElementById('bienvenida').textContent = `Bienvenido, ${event.data.username}`;
+    }
+    });
+
+    
   </script>
 </body>
 </html>

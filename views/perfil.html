@@ -1,8 +1,182 @@
 <!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"><title>Perfil</title></head>
+<head>
+  <meta charset="UTF-8">
+  <title>Perfil del Administrador</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 30px;
+      background-color: #f9fafb;
+    }
+
+    h2 {
+      color: #0c2340;
+      margin-bottom: 20px;
+    }
+
+    form {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+      margin-bottom: 30px;
+      max-width: 500px;
+    }
+
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+
+    button {
+      margin-top: 15px;
+      background-color: #0c2340;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    button:hover {
+      background-color: #123d6a;
+    }
+
+    .success {
+      color: green;
+      font-weight: bold;
+    }
+
+    .error {
+      color: red;
+      font-weight: bold;
+    }
+  </style>
+</head>
 <body>
+
   <h2>Perfil del Administrador</h2>
-  <p>Aquí podrás ver y actualizar tus datos personales.</p>
+
+  <!-- FORMULARIO DE PERFIL -->
+  <form id="perfilForm">
+    <label>Nombre de usuario</label>
+    <input type="text" id="username" required>
+
+    <label>Email</label>
+    <input type="email" id="email" placeholder="(opcional)">
+
+    <label>Teléfono móvil</label>
+    <input type="text" id="movil" placeholder="(opcional)">
+
+    <button type="submit">Actualizar perfil</button>
+    <p id="msgPerfil"></p>
+  </form>
+
+  <!-- FORMULARIO DE CAMBIO DE CONTRASEÑA -->
+  <form id="passwordForm">
+    <h3>Cambiar contraseña</h3>
+    <label>Contraseña actual</label>
+    <input type="password" id="oldPassword" required>
+
+    <label>Nueva contraseña</label>
+    <input type="password" id="newPassword" required>
+
+    <label>Confirmar nueva contraseña</label>
+    <input type="password" id="confirmPassword" required>
+
+    <button type="submit">Actualizar contraseña</button>
+    <p id="msgPassword"></p>
+  </form>
+
+  <script>
+    // --- CARGAR PERFIL ACTUAL ---
+    async function cargarPerfil() {
+      try {
+        const res = await fetch('/api/perfil');
+        const data = await res.json();
+
+        if (data.error) {
+          document.getElementById('msgPerfil').textContent = data.error;
+          return;
+        }
+
+        // Autocompletar los campos con los valores actuales
+        document.getElementById('username').value = data.username || '';
+        document.getElementById('email').value = data.email || '';
+        document.getElementById('movil').value = data.movil || '';
+
+      } catch (err) {
+        document.getElementById('msgPerfil').textContent = "Error al cargar perfil.";
+      }
+    }
+
+    // Cargar automáticamente al ingresar a la página
+    window.addEventListener('DOMContentLoaded', cargarPerfil);
+
+    // --- ACTUALIZAR PERFIL ---
+    document.getElementById('perfilForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const body = {
+        username: document.getElementById('username').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        movil: document.getElementById('movil').value.trim()
+      };
+
+      const res = await fetch('/api/perfil', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const data = await res.json();
+      const msg = document.getElementById('msgPerfil');
+      msg.textContent = data.msg || data.error;
+      msg.className = data.success ? 'success' : 'error';
+
+      // Si se actualizó correctamente, actualiza el header del admin
+      if (data.success) {
+        window.parent.postMessage({ type: 'perfilActualizado', username: body.username }, '*');
+      }
+    });
+
+    // --- CAMBIAR CONTRASEÑA ---
+    document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const body = {
+        oldPassword: document.getElementById('oldPassword').value,
+        newPassword: document.getElementById('newPassword').value,
+        confirmPassword: document.getElementById('confirmPassword').value
+      };
+
+      const res = await fetch('/api/perfil/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const data = await res.json();
+      const msg = document.getElementById('msgPassword');
+      msg.textContent = data.msg || data.error;
+      msg.className = data.success ? 'success' : 'error';
+
+      if (data.success) {
+        document.getElementById('passwordForm').reset();
+      }
+    });
+  </script>
+
 </body>
 </html>

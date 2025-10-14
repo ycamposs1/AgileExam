@@ -8,8 +8,11 @@ db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS admin (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE,
-    password TEXT
+    password TEXT,
+    email TEXT,
+    movil TEXT
   )`);
+  
   // Tabla de fondos disponibles (dinero total para préstamos)
 db.run(`CREATE TABLE IF NOT EXISTS fondos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
