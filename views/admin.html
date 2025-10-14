@@ -11,9 +11,55 @@
       height: 100vh;
       background-color: #f3f4f6;
       overflow: hidden;
+      flex-direction: column;
     }
 
-    /* Sidebar */
+    /* --- Barra superior --- */
+    .navbar {
+      background-color: #0c2340;
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 20px;
+      height: 60px;
+      flex-shrink: 0;
+    }
+
+    .navbar h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 500;
+    }
+
+    .navbar .right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .navbar button {
+      background-color: #8b0000;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    .navbar button:hover {
+      background-color: #a00000;
+    }
+
+    /* --- Contenedor inferior --- */
+    .main {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 60px);
+    }
+
+    /* --- Sidebar --- */
     .sidebar {
       background-color: #0c2340;
       color: white;
@@ -30,7 +76,6 @@
       width: 120px;
       margin-bottom: 20px;
       border-radius: 10px;
-      transition: opacity 0.3s ease;
     }
 
     .sidebar a {
@@ -48,25 +93,23 @@
       background-color: #123d6a;
     }
 
-    /* Activo */
     .sidebar a.active {
       background-color: #1b4a80;
       font-weight: bold;
       color: #ffd700;
     }
 
-    /* Ocultar barra */
     .sidebar.hidden {
       width: 0;
       overflow: hidden;
       padding: 0;
     }
 
-    /* Botón flotante */
+    /* --- Botón de colapsar --- */
     #toggleSidebar {
       position: fixed;
       top: 50%;
-      left: 250px; /* alineado al borde derecho del sidebar */
+      left: 250px;
       transform: translateY(-50%);
       background-color: #0c2340;
       color: white;
@@ -79,7 +122,6 @@
       transition: all 0.3s ease;
     }
 
-    /* Cuando el sidebar está oculto, el botón se mueve a la izquierda */
     .sidebar.hidden + #toggleSidebar {
       left: 10px;
     }
@@ -88,7 +130,7 @@
       background-color: #123d6a;
     }
 
-    /* Contenido */
+    /* --- Contenido principal --- */
     .content {
       flex: 1;
       padding: 0;
@@ -102,25 +144,35 @@
       border: none;
       background: white;
     }
-
   </style>
 </head>
 <body>
 
-  <div class="sidebar" id="sidebar">
-    <img src="assets/logo.png" alt="Logo Banco" id="logo">
-    <a href="/clientes" target="contentFrame" data-section="clientes">Clientes Naturales</a>
-    <a href="/pep" target="contentFrame" data-section="pep">PEP</a>
-    <a href="/actividad" target="contentFrame" data-section="actividad">Registro de Actividad</a>
-    <a href="/perfil" target="contentFrame" data-section="perfil">Perfil</a>
-    <a href="/logout" style="background-color:#8b0000;">Cerrar Sesión</a>
+  <!-- Navbar superior -->
+  <div class="navbar">
+    <h2>Banco BRAR</h2>
+    <div class="right">
+      <span id="bienvenida">Bienvenido, usuario</span>
+      <span id="fondos">Cantidad de dinero a prestar: S/ 0.00</span>
+      <button onclick="cerrarSesion()">Cerrar Sesión</button>
+    </div>
   </div>
 
-  <!-- Botón flotante fuera del sidebar -->
-  <button id="toggleSidebar">⮞</button>
+  <!-- Panel inferior -->
+  <div class="main">
+    <div class="sidebar" id="sidebar">
+      <img src="assets/logo.png" alt="Logo Banco" id="logo">
+      <a href="/clientes" target="contentFrame" data-section="clientes">Clientes Naturales</a>
+      <a href="/pep" target="contentFrame" data-section="pep">PEP</a>
+      <a href="/actividad" target="contentFrame" data-section="actividad">Registro de Actividad</a>
+      <a href="/perfil" target="contentFrame" data-section="perfil">Perfil</a>
+    </div>
 
-  <div class="content">
-    <iframe name="contentFrame" src="/clientes" id="mainFrame"></iframe>
+    <button id="toggleSidebar">⮞</button>
+
+    <div class="content">
+      <iframe name="contentFrame" src="/clientes" id="mainFrame"></iframe>
+    </div>
   </div>
 
   <script>
@@ -129,7 +181,7 @@
     const links = document.querySelectorAll('.sidebar a[data-section]');
     const iframe = document.getElementById('mainFrame');
 
-    // --- Restaurar estado guardado ---
+    // Recuperar estado de sidebar
     const sidebarHidden = localStorage.getItem('sidebarHidden') === 'true';
     if (sidebarHidden) {
       sidebar.classList.add('hidden');
@@ -145,7 +197,7 @@
       localStorage.setItem('sidebarHidden', isHidden);
     });
 
-    // --- Resaltar enlace activo ---
+    // --- Marcar activo ---
     function setActive(section) {
       links.forEach(link => {
         link.classList.toggle('active', link.dataset.section === section);
@@ -153,14 +205,13 @@
     }
 
     links.forEach(link => {
-      link.addEventListener('click', (e) => {
+      link.addEventListener('click', () => {
         const section = link.dataset.section;
         setActive(section);
         localStorage.setItem('activeSection', section);
       });
     });
 
-    // --- Restaurar la última sección ---
     const savedSection = localStorage.getItem('activeSection');
     if (savedSection) {
       setActive(savedSection);
@@ -168,7 +219,24 @@
     } else {
       setActive('clientes');
     }
-  </script>
 
+    // --- Mostrar usuario y fondos ---
+    async function cargarDatos() {
+      try {
+        const res = await fetch('/api/info');
+        const data = await res.json();
+        document.getElementById('bienvenida').textContent = `Bienvenido, ${data.usuario}`;
+        document.getElementById('fondos').textContent = `Cantidad de dinero a prestar: S/ ${data.monto.toFixed(2)}`;
+      } catch (e) {
+        console.error("Error cargando datos", e);
+      }
+    }
+    cargarDatos();
+
+    // --- Cerrar sesión ---
+    function cerrarSesion() {
+      window.location.href = '/logout';
+    }
+  </script>
 </body>
 </html>
