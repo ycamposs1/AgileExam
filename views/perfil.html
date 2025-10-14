@@ -99,84 +99,131 @@
     <p id="msgPassword"></p>
   </form>
 
-  <script>
-    // --- CARGAR PERFIL ACTUAL ---
-    async function cargarPerfil() {
-      try {
-        const res = await fetch('/api/perfil');
-        const data = await res.json();
+ <script>
+  // --- Mostrar ventana de confirmación elegante ---
+  async function confirmarAccion(mensaje) {
+    return new Promise((resolve) => {
+      // Crear capa de fondo
+      const overlay = document.createElement('div');
+      overlay.style.position = 'fixed';
+      overlay.style.top = 0;
+      overlay.style.left = 0;
+      overlay.style.width = '100%';
+      overlay.style.height = '100%';
+      overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+      overlay.style.display = 'flex';
+      overlay.style.justifyContent = 'center';
+      overlay.style.alignItems = 'center';
+      overlay.style.zIndex = 9999;
 
-        if (data.error) {
-          document.getElementById('msgPerfil').textContent = data.error;
-          return;
-        }
+      // Crear caja del mensaje
+      const box = document.createElement('div');
+      box.style.background = '#fff';
+      box.style.padding = '20px 30px';
+      box.style.borderRadius = '10px';
+      box.style.textAlign = 'center';
+      box.style.boxShadow = '0 2px 10px rgba(0,0,0,0.3)';
+      box.innerHTML = `
+        <p style="font-size:16px;margin-bottom:20px;color:#0c2340;">${mensaje}</p>
+        <button id="confirmarSi" style="background:#0c2340;color:white;padding:8px 15px;border:none;border-radius:5px;margin-right:10px;cursor:pointer;">Sí</button>
+        <button id="confirmarNo" style="background:#a00000;color:white;padding:8px 15px;border:none;border-radius:5px;cursor:pointer;">No</button>
+      `;
 
-        // Autocompletar los campos con los valores actuales
-        document.getElementById('username').value = data.username || '';
-        document.getElementById('email').value = data.email || '';
-        document.getElementById('movil').value = data.movil || '';
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
 
-      } catch (err) {
-        document.getElementById('msgPerfil').textContent = "Error al cargar perfil.";
+      document.getElementById('confirmarSi').onclick = () => {
+        overlay.remove();
+        resolve(true);
+      };
+      document.getElementById('confirmarNo').onclick = () => {
+        overlay.remove();
+        resolve(false);
+      };
+    });
+  }
+
+  // --- CARGAR PERFIL ACTUAL ---
+  async function cargarPerfil() {
+    try {
+      const res = await fetch('/api/perfil');
+      const data = await res.json();
+
+      if (data.error) {
+        document.getElementById('msgPerfil').textContent = data.error;
+        return;
       }
+
+      document.getElementById('username').value = data.username || '';
+      document.getElementById('email').value = data.email || '';
+      document.getElementById('movil').value = data.movil || '';
+
+    } catch (err) {
+      document.getElementById('msgPerfil').textContent = "Error al cargar perfil.";
     }
+  }
 
-    // Cargar automáticamente al ingresar a la página
-    window.addEventListener('DOMContentLoaded', cargarPerfil);
+  // Ejecutar automáticamente al cargar
+  window.addEventListener('DOMContentLoaded', cargarPerfil);
 
-    // --- ACTUALIZAR PERFIL ---
-    document.getElementById('perfilForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
+  // --- ACTUALIZAR PERFIL ---
+  document.getElementById('perfilForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
 
-      const body = {
-        username: document.getElementById('username').value.trim(),
-        email: document.getElementById('email').value.trim(),
-        movil: document.getElementById('movil').value.trim()
-      };
+    const confirmar = await confirmarAccion("¿Seguro que deseas actualizar tu información de perfil?");
+    if (!confirmar) return;
 
-      const res = await fetch('/api/perfil', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
+    const body = {
+      username: document.getElementById('username').value.trim(),
+      email: document.getElementById('email').value.trim(),
+      movil: document.getElementById('movil').value.trim()
+    };
 
-      const data = await res.json();
-      const msg = document.getElementById('msgPerfil');
-      msg.textContent = data.msg || data.error;
-      msg.className = data.success ? 'success' : 'error';
-
-      // Si se actualizó correctamente, actualiza el header del admin
-      if (data.success) {
-        window.parent.postMessage({ type: 'perfilActualizado', username: body.username }, '*');
-      }
+    const res = await fetch('/api/perfil', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
     });
 
-    // --- CAMBIAR CONTRASEÑA ---
-    document.getElementById('passwordForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
+    const data = await res.json();
+    const msg = document.getElementById('msgPerfil');
+    msg.textContent = data.msg || data.error;
+    msg.className = data.success ? 'success' : 'error';
 
-      const body = {
-        oldPassword: document.getElementById('oldPassword').value,
-        newPassword: document.getElementById('newPassword').value,
-        confirmPassword: document.getElementById('confirmPassword').value
-      };
+    if (data.success) {
+      // Actualizar el header del panel principal
+      window.parent.postMessage({ type: 'perfilActualizado', username: body.username }, '*');
+    }
+  });
 
-      const res = await fetch('/api/perfil/password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
+  // --- CAMBIAR CONTRASEÑA ---
+  document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
 
-      const data = await res.json();
-      const msg = document.getElementById('msgPassword');
-      msg.textContent = data.msg || data.error;
-      msg.className = data.success ? 'success' : 'error';
+    const confirmar = await confirmarAccion("¿Seguro que deseas cambiar tu contraseña?");
+    if (!confirmar) return;
 
-      if (data.success) {
-        document.getElementById('passwordForm').reset();
-      }
+    const body = {
+      oldPassword: document.getElementById('oldPassword').value,
+      newPassword: document.getElementById('newPassword').value,
+      confirmPassword: document.getElementById('confirmPassword').value
+    };
+
+    const res = await fetch('/api/perfil/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
     });
-  </script>
+
+    const data = await res.json();
+    const msg = document.getElementById('msgPassword');
+    msg.textContent = data.msg || data.error;
+    msg.className = data.success ? 'success' : 'error';
+
+    if (data.success) document.getElementById('passwordForm').reset();
+  });
+</script>
+
 
 </body>
 </html>

@@ -2,10 +2,12 @@ require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
+const axios = require('axios');
 const db = require('./db');
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 app.use(express.static('views'));
 
 // 🔐 Configurar sesión segura
@@ -51,7 +53,6 @@ app.post('/login', (req, res) => {
     res.redirect('/admin');
   });
 });
-
 
 // Panel principal (admin)
 app.get('/admin', (req, res) => {
@@ -101,7 +102,7 @@ app.post('/nuevo-admin', async (req, res) => {
   });
 });
 
-// 🔹 NUEVA RUTA: API PARA MOSTRAR DATOS EN LA NAVBAR
+// 🔹 Mostrar información en navbar
 app.get('/api/info', (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: "No autenticado" });
 
@@ -119,8 +120,6 @@ app.get('/api/info', (req, res) => {
     });
   });
 });
-
-app.use(express.json());
 
 // 🔹 Obtener perfil actual
 app.get('/api/perfil', (req, res) => {
@@ -142,7 +141,6 @@ app.post('/api/perfil', (req, res) => {
     function(err) {
       if (err) return res.json({ error: "Error al actualizar" });
 
-      // Actualiza el nombre en la sesión
       req.session.user.username = username;
       res.json({ success: true, msg: "Perfil actualizado correctamente" });
     });
@@ -171,11 +169,150 @@ app.post('/api/perfil/password', async (req, res) => {
   });
 });
 
-
 // 🔹 Cerrar sesión
 app.get('/logout', (req, res) => {
   req.session.destroy(() => {
     res.redirect('/');
+  });
+});
+
+
+//const axios = require("axios");
+
+// ✅ Nueva ruta usando la API de Factiliza
+app.post("/api/reniec", async (req, res) => {
+  const { dni } = req.body;
+
+  if (!dni) {
+    return res.status(400).json({
+      success: false,
+      message: "Debe ingresar un DNI"
+    });
+  }
+
+  try {
+    // Construcción de URL según documentación de Factiliza
+    const url = `https://api.factiliza.com/v1/dni/info/${dni}`;
+
+    const response = await axios.get(url, {
+      headers: {
+        Authorization: `Bearer ${process.env.FACTILIZA_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      timeout: 10000 // 10 segundos de espera
+    });
+
+    // Procesamos la respuesta exitosa
+    if (response.data && response.data.success && response.data.data) {
+      const d = response.data.data;
+
+      console.log("✅ Factiliza OK:", d);
+
+      return res.json({
+        success: true,
+        message: "Consulta exitosa",
+        data: {
+            numero: d.numero,
+            nombres: d.nombres,
+            apellido_paterno: d.apellido_paterno,
+            apellido_materno: d.apellido_materno,
+            nombre_completo: d.nombre_completo,
+            departamento: d.departamento,
+            provincia: d.provincia,
+            distrito: d.distrito,
+            direccion: d.direccion,
+            direccion_completa: d.direccion_completa
+        }
+        });
+
+    } else {
+      console.warn("⚠️ Factiliza sin resultados:", response.data);
+      return res.status(404).json({
+        success: false,
+        message: "No se encontró información del DNI"
+      });
+    }
+  } catch (error) {
+    console.error("❌ Error Factiliza:", error.response?.data || error.message);
+    const status = error.response?.status || 500;
+    const message =
+      error.response?.data?.message ||
+      (status === 401
+        ? "Token inválido o sin permisos."
+        : "Error al consultar Factiliza. Intente nuevamente más tarde.");
+
+    res.status(status).json({ success: false, message });
+  }
+});
+
+
+// 🔹 Obtener lista de clientes con préstamos
+app.get('/api/clientes', (req, res) => {
+  const query = `
+    SELECT 
+      c.dni,
+      c.nombre,
+      IFNULL(p.monto, 0) AS monto,
+      IFNULL(p.fecha_inicio, '') AS fecha_inicio,
+      IFNULL(p.fecha_fin, '') AS fecha_fin
+    FROM clientes c
+    LEFT JOIN prestamos p ON c.id = p.id_cliente
+    ORDER BY c.id DESC
+  `;
+  app.post('/api/clientes', (req, res) => {
+  const {
+    dni,
+    nombre,
+    nombres,
+    apellido_paterno,
+    apellido_materno,
+    departamento,
+    direccion,
+    monto,
+    fecha_inicio,
+    fecha_fin
+  } = req.body;
+
+  if (!dni || !nombre) {
+    return res.json({ success: false, message: "Faltan datos obligatorios." });
+  }
+
+  db.run(
+    `INSERT INTO clientes (dni, nombre, fecha_nacimiento, direccion, departamento, provincia, distrito)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [dni, nombre, "", direccion, departamento, "", ""],
+    function (err) {
+      if (err) {
+        console.error("Error insertando cliente:", err);
+        return res.json({ success: false, message: "Error al registrar cliente (ya existe o DB error)." });
+      }
+
+      const id_cliente = this.lastID;
+      db.run(
+        `INSERT INTO prestamos (id_cliente, monto, fecha_inicio, fecha_fin)
+         VALUES (?, ?, ?, ?)`,
+        [id_cliente, monto, fecha_inicio, fecha_fin],
+        function (err2) {
+          if (err2) {
+            console.error("Error creando préstamo:", err2);
+            return res.json({ success: false, message: "Cliente creado sin préstamo (error de BD)." });
+          }
+
+          res.json({ success: true, message: "Cliente registrado correctamente con préstamo." });
+        }
+      );
+    }
+  );
+});
+
+
+  db.all(query, [], (err, rows) => {
+    if (err) {
+      console.error("Error al obtener clientes:", err);
+      return res.status(500).json({ success: false, message: "Error al obtener clientes" });
+    }
+
+    res.json({ success: true, clientes: rows });
   });
 });
 

@@ -12,7 +12,7 @@ db.serialize(() => {
     email TEXT,
     movil TEXT
   )`);
-  
+
   // Tabla de fondos disponibles (dinero total para préstamos)
 db.run(`CREATE TABLE IF NOT EXISTS fondos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,6 +25,31 @@ db.get("SELECT COUNT(*) as count FROM fondos", (err, row) => {
     db.run("INSERT INTO fondos (monto_total) VALUES (?)", [10000]);
   }
 });
+
+// Tabla de clientes
+db.run(`CREATE TABLE IF NOT EXISTS clientes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dni TEXT UNIQUE,
+  nombre TEXT,
+  fecha_nacimiento TEXT,
+  direccion TEXT,
+  departamento TEXT,
+  provincia TEXT,
+  distrito TEXT
+)`);
+
+// Tabla de préstamos (relacional)
+db.run(`CREATE TABLE IF NOT EXISTS prestamos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id_cliente INTEGER,
+  monto REAL,
+  fecha_inicio TEXT,
+  fecha_fin TEXT,
+  FOREIGN KEY (id_cliente) REFERENCES clientes (id)
+)`);
+
+
+
 
 });
 
