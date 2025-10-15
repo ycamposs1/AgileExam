@@ -4,138 +4,28 @@
   <meta charset="UTF-8">
   <title>Clientes Naturales</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f9fafb;
-      padding: 20px;
-    }
-
-    h2 {
-      color: #0c2340;
-      margin-bottom: 20px;
-    }
-
-    /* Pestañas */
-    .tabs {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-
-    .tab {
-      background-color: #0c2340;
-      color: white;
-      padding: 10px 20px;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: 0.3s;
-    }
-
-    .tab.active {
-      background-color: #1b4a80;
-      font-weight: bold;
-    }
-
-    /* Secciones */
-    .section {
-      display: none;
-    }
-
-    .section.active {
-      display: block;
-    }
-
-    /* Tabla */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-
-    th, td {
-      border: 1px solid #ccc;
-      padding: 10px;
-      text-align: left;
-    }
-
-    th {
-      background-color: #0c2340;
-      color: white;
-    }
-
-    .actions button {
-      background-color: #0c2340;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      padding: 5px 10px;
-      cursor: pointer;
-      margin-right: 5px;
-    }
-
-    .actions button:hover {
-      background-color: #1b4a80;
-    }
-
-    /* Formulario */
-    form {
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      max-width: 500px;
-    }
-
-    label {
-      display: block;
-      font-weight: bold;
-      margin-top: 10px;
-    }
-
-    input {
-      width: 100%;
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      margin-top: 5px;
-    }
-
-    button {
-      background-color: #0c2340;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      padding: 10px 15px;
-      margin-top: 15px;
-      cursor: pointer;
-      transition: 0.3s;
-    }
-
-    button:hover {
-      background-color: #123d6a;
-    }
-
-    /* Mensajes */
-    #msgForm, #msgLista {
-      margin-top: 10px;
-      font-weight: bold;
-    }
-
-    .success {
-      color: green;
-    }
-
-    .error {
-      color: red;
-    }
-
-    /* Cargando */
-    .loading {
-      color: #0c2340;
-      font-weight: bold;
-    }
+    body { font-family: Arial, sans-serif; background-color: #f9fafb; padding: 20px; }
+    h2 { color: #0c2340; margin-bottom: 20px; }
+    .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+    .tab { background-color: #0c2340; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: 0.3s; }
+    .tab.active { background-color: #1b4a80; font-weight: bold; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .toolbar { margin-bottom: 10px; display:flex; gap:8px; align-items:center; }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
+    th { background-color: #0c2340; color: white; }
+    .actions button { background-color: #0c2340; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer; margin-right: 5px; }
+    .actions button:hover { background-color: #1b4a80; }
+    form { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 520px; }
+    label { display: block; font-weight: bold; margin-top: 10px; }
+    input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 5px; }
+    button { background-color: #0c2340; color: white; border: none; border-radius: 6px; padding: 10px 15px; margin-top: 15px; cursor: pointer; transition: 0.3s; }
+    button:hover { background-color: #123d6a; }
+    #msgForm, #msgLista { margin-top: 10px; font-weight: bold; }
+    .success { color: green; }
+    .error { color: red; }
+    .loading { color: #0c2340; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -149,7 +39,10 @@
 
   <!-- 🧾 LISTA DE CLIENTES -->
   <div class="section active" id="lista-section">
-    <p id="msgLista" class="loading">Cargando lista de clientes...</p>
+    <div class="toolbar">
+      <button id="btnRecargar">🔄 Recargar</button>
+      <span id="msgLista" class="loading">Cargando lista de clientes...</span>
+    </div>
     <table id="tabla-clientes">
       <thead>
         <tr>
@@ -161,56 +54,78 @@
           <th>Operaciones</th>
         </tr>
       </thead>
-      <tbody>
-        <!-- Se llenará dinámicamente -->
-      </tbody>
+      <tbody></tbody>
     </table>
   </div>
 
   <!-- 🧍 CREAR CLIENTE -->
   <div class="section" id="crear-section">
     <form id="crearForm">
-  <label for="dni">DNI</label>
-  <div style="display:flex;gap:5px;align-items:center;">
-    <input type="text" id="dni" maxlength="8" required placeholder="Ej: 12345678" style="flex:1;">
-    <button type="button" id="buscarDNI">🔍</button>
-  </div>
+      <label for="dni">DNI</label>
+      <div style="display:flex;gap:5px;align-items:center;">
+        <input type="text" id="dni" maxlength="8" required placeholder="Ej: 12345678" style="flex:1;">
+        <button type="button" id="buscarDNI">🔍</button>
+      </div>
 
-  <label for="nombre">Nombre completo</label>
-  <input type="text" id="nombre" readonly style="background-color:#e9ecef;">
+      <label for="nombre">Nombre completo</label>
+      <input type="text" id="nombre" readonly style="background-color:#e9ecef;">
 
-  <label for="nombres">Nombres</label>
-  <input type="text" id="nombres" readonly style="background-color:#e9ecef;">
+      <label for="nombres">Nombres</label>
+      <input type="text" id="nombres" readonly style="background-color:#e9ecef;">
 
-  <label for="apellidoP">Apellido paterno</label>
-  <input type="text" id="apellidoP" readonly style="background-color:#e9ecef;">
+      <label for="apellidoP">Apellido paterno</label>
+      <input type="text" id="apellidoP" readonly style="background-color:#e9ecef;">
 
-  <label for="apellidoM">Apellido materno</label>
-  <input type="text" id="apellidoM" readonly style="background-color:#e9ecef;">
+      <label for="apellidoM">Apellido materno</label>
+      <input type="text" id="apellidoM" readonly style="background-color:#e9ecef;">
 
-  <label for="departamento">Departamento</label>
-  <input type="text" id="departamento" readonly style="background-color:#e9ecef;">
+      <label for="departamento">Departamento</label>
+      <input type="text" id="departamento" readonly style="background-color:#e9ecef;">
 
-  <label for="direccionCompleta">Dirección completa</label>
-  <input type="text" id="direccionCompleta" readonly style="background-color:#e9ecef;">
+      <label for="direccionCompleta">Dirección completa</label>
+      <input type="text" id="direccionCompleta" readonly style="background-color:#e9ecef;">
 
-  <label for="dinero">Monto del préstamo (S/)</label>
-  <input type="number" id="dinero" min="0" step="0.01" required>
+      <label for="dinero">Monto del préstamo (S/)</label>
+      <input type="number" id="dinero" min="0" step="0.01" required>
 
-  <label for="fechaInicio">Fecha de inicio</label>
-  <input type="date" id="fechaInicio" required>
+      <label for="fechaInicio">Fecha de inicio</label>
+      <input type="date" id="fechaInicio" readonly>
 
-  <label for="fechaFin">Fecha de fin</label>
-  <input type="date" id="fechaFin" required>
+      <label for="plazo">Plazo (pago)</label>
+      <select id="plazo" required>
+        <option value="">Seleccione...</option>
+        <option value="3">3 meses</option>
+        <option value="6">6 meses</option>
+        <option value="9">9 meses</option>
+        <option value="12">12 meses</option>
+        <option value="24">24 meses</option>
+      </select>
 
-  <button type="submit">💾 Guardar Cliente</button>
-  <p id="msgForm"></p>
-</form>
+      <label for="fechaFin">Fecha de fin</label>
+      <input type="date" id="fechaFin" readonly>
 
+      <button type="submit">💾 Guardar Cliente</button>
+      <p id="msgForm"></p>
+    </form>
   </div>
 
   <script>
-    // ======== MANEJO DE PESTAÑAS ========
+    // ========= FECHAS =========
+    const fechaInicioInput = document.getElementById('fechaInicio');
+    const hoy = new Date();
+    const hoyISO = hoy.toISOString().split('T')[0];
+    fechaInicioInput.value = hoyISO;
+
+    // FIX: estaba escrito "documet"
+    document.getElementById("plazo").addEventListener("change", () => {
+      const meses = parseInt(document.getElementById("plazo").value);
+      if (!meses) return;
+      const base = new Date(); // siempre desde "hoy" actual
+      base.setMonth(base.getMonth() + meses);
+      document.getElementById("fechaFin").value = base.toISOString().split('T')[0];
+    });
+
+    // ========= PESTAÑAS =========
     const tabLista = document.getElementById('tab-lista');
     const tabCrear = document.getElementById('tab-crear');
     const listaSection = document.getElementById('lista-section');
@@ -231,7 +146,7 @@
       listaSection.classList.remove('active');
     });
 
-    // ======== CARGAR LISTA DE CLIENTES ========
+    // ========= LISTA DE CLIENTES =========
     async function cargarClientes() {
       const msg = document.getElementById('msgLista');
       const tbody = document.querySelector('#tabla-clientes tbody');
@@ -239,10 +154,10 @@
       msg.className = "loading";
 
       try {
-        const res = await fetch('/api/clientes');
+        const res = await fetch('/api/clientes', { cache: 'no-store' });
         const data = await res.json();
 
-        if (!data.success || data.clientes.length === 0) {
+        if (!data.success || !data.clientes || data.clientes.length === 0) {
           msg.textContent = "No hay clientes registrados.";
           msg.className = "error";
           tbody.innerHTML = "";
@@ -256,117 +171,106 @@
           tr.innerHTML = `
             <td>${c.dni}</td>
             <td>${c.nombre}</td>
-            <td>${c.monto}</td>
-            <td>${c.fecha_inicio}</td>
-            <td>${c.fecha_fin}</td>
+            <td>${Number(c.monto).toFixed(2)}</td>
+            <td>${c.fecha_inicio || ''}</td>
+            <td>${c.fecha_fin || ''}</td>
             <td class="actions">
-              <button onclick="alert('Ver detalle de ${c.nombre}')">👁️</button>
+              <button data-dni="${c.dni}" class="btn-ver">👁️</button>
             </td>
           `;
           tbody.appendChild(tr);
         });
       } catch (err) {
+        console.error(err);
         msg.textContent = "Error al cargar la lista.";
         msg.className = "error";
       }
     }
 
-    cargarClientes();
+    document.getElementById('btnRecargar').addEventListener('click', cargarClientes);
+    document.addEventListener('DOMContentLoaded', cargarClientes);
 
-    // ======== BUSCAR DNI ========
-    const buscarBtn = document.getElementById('buscarDNI');
-    const msgForm = document.getElementById('msgForm');
+    // ========= BUSCAR DNI =========
+    const buscarBtn = document.getElementById("buscarDNI");
+    const msgForm = document.getElementById("msgForm");
 
-    buscarBtn.addEventListener('click', async () => {
-  const dni = document.getElementById('dni').value.trim();
-  if (dni.length !== 8) {
-    msgForm.textContent = "⚠️ Ingrese un DNI válido de 8 dígitos.";
-    msgForm.className = "error";
-    return;
-  }
-
-  msgForm.textContent = "🔄 Consultando Factiliza...";
-  msgForm.className = "loading";
-
-  try {
-    const res = await fetch('/api/reniec', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dni })
-    });
-    const data = await res.json();
-
-    if (data.success && data.data) {
-      const d = data.data;
-
-      // 💡 Usamos los nombres EXACTOS que devuelve Factiliza
-      document.getElementById('nombre').value = d.nombre_completo || '';
-      document.getElementById('nombres').value = d.nombres || '';
-      document.getElementById('apellidoP').value = d.apellido_paterno || '';
-      document.getElementById('apellidoM').value = d.apellido_materno || '';
-      document.getElementById('departamento').value = d.departamento || '';
-      document.getElementById('direccionCompleta').value = d.direccion_completa || '';
-
-      msgForm.textContent = "✅ Persona encontrada.";
-      msgForm.className = "success";
-    } else {
-      msgForm.textContent = "❌ No se encontró el DNI.";
-      msgForm.className = "error";
-    }
-  } catch (err) {
-    msgForm.textContent = "❌ Error al consultar Factiliza.";
-    msgForm.className = "error";
-    console.error(err);
-  }
-});
-
-
-
-
-
-
-
-
-    // ======== GUARDAR CLIENTE ========
-    document.getElementById('crearForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      msgForm.textContent = "Guardando cliente...";
-      msgForm.className = "loading";
-
-        const body = {
-        dni: document.getElementById('dni').value.trim(),
-        nombre: document.getElementById('nombre').value.trim(),
-        nombres: document.getElementById('nombres').value.trim(),
-        apellido_paterno: document.getElementById('apellidoP').value.trim(),
-        apellido_materno: document.getElementById('apellidoM').value.trim(),
-        departamento: document.getElementById('departamento').value.trim(),
-        direccion: document.getElementById('direccionCompleta').value.trim(),
-        monto: parseFloat(document.getElementById('dinero').value),
-        fecha_inicio: document.getElementById('fechaInicio').value,
-        fecha_fin: document.getElementById('fechaFin').value
-        };
-
-
-      if (!body.nombre) {
-        msgForm.textContent = "⚠️ Primero busca el nombre con el DNI.";
+    buscarBtn.addEventListener("click", async () => {
+      const dni = document.getElementById("dni").value.trim();
+      if (dni.length !== 8) {
+        msgForm.textContent = "⚠️ Ingrese un DNI válido de 8 dígitos.";
         msgForm.className = "error";
         return;
       }
 
+      msgForm.textContent = "🔄 Consultando Factiliza...";
+      msgForm.className = "loading";
+
       try {
-        const res = await fetch('/api/clientes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const res = await fetch("/api/reniec", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dni }),
+        });
+        const data = await res.json();
+
+        if (data.success && data.data) {
+          const d = data.data;
+          document.getElementById("nombre").value = d.nombre_completo || "";
+          document.getElementById("nombres").value = d.nombres || "";
+          document.getElementById("apellidoP").value = d.apellido_paterno || "";
+          document.getElementById("apellidoM").value = d.apellido_materno || "";
+          document.getElementById("departamento").value = d.departamento || "";
+          document.getElementById("direccionCompleta").value = d.direccion_completa || "";
+          msgForm.textContent = "✅ Persona encontrada.";
+          msgForm.className = "success";
+        } else {
+          msgForm.textContent = "❌ No se encontró el DNI.";
+          msgForm.className = "error";
+        }
+      } catch (err) {
+        msgForm.textContent = "❌ Error al consultar Factiliza.";
+        msgForm.className = "error";
+      }
+    });
+
+    // ========= GUARDAR CLIENTE =========
+    document.getElementById("crearForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      if (!confirm("¿Desea registrar este préstamo y descontar el monto del fondo?")) return;
+
+      msgForm.textContent = "Guardando cliente...";
+      msgForm.className = "loading";
+
+      const body = {
+        dni: document.getElementById("dni").value.trim(),
+        nombre: document.getElementById("nombre").value.trim(),
+        nombres: document.getElementById("nombres").value.trim(),
+        apellido_paterno: document.getElementById("apellidoP").value.trim(),
+        apellido_materno: document.getElementById("apellidoM").value.trim(),
+        departamento: document.getElementById("departamento").value.trim(),
+        direccion: document.getElementById("direccionCompleta").value.trim(),
+        monto: parseFloat(document.getElementById("dinero").value),
+        fecha_inicio: document.getElementById("fechaInicio").value,
+        fecha_fin: document.getElementById("fechaFin").value
+      };
+
+      try {
+        const res = await fetch("/api/clientes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body)
         });
         const data = await res.json();
 
         msgForm.textContent = data.message;
         msgForm.className = data.success ? "success" : "error";
-
         if (data.success) {
-          document.getElementById('crearForm').reset();
-          document.getElementById('nombre').value = "";
+          document.getElementById("crearForm").reset();
+          // re-autocompletar fecha de inicio y limpiar fin
+          fechaInicioInput.value = hoyISO;
+          document.getElementById("fechaFin").value = "";
+          cargarClientes(); // refrescar lista sin perder datos
         }
       } catch (err) {
         msgForm.textContent = "❌ Error al guardar el cliente.";

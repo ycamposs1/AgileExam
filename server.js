@@ -246,75 +246,138 @@ app.post("/api/reniec", async (req, res) => {
 });
 
 
-// 🔹 Obtener lista de clientes con préstamos
+// 🔹 Obtener lista de clientes con deuda agregada
 app.get('/api/clientes', (req, res) => {
+  if (!req.session.user) return res.status(401).json({ success: false, message: "No autenticado" });
+
   const query = `
-    SELECT 
+    SELECT
       c.dni,
       c.nombre,
-      IFNULL(p.monto, 0) AS monto,
-      IFNULL(p.fecha_inicio, '') AS fecha_inicio,
-      IFNULL(p.fecha_fin, '') AS fecha_fin
+      IFNULL(SUM(p.monto), 0)         AS monto,
+      MIN(p.fecha_inicio)             AS fecha_inicio,
+      MAX(p.fecha_fin)                AS fecha_fin
     FROM clientes c
     LEFT JOIN prestamos p ON c.id = p.id_cliente
+    GROUP BY c.id
     ORDER BY c.id DESC
   `;
-  app.post('/api/clientes', (req, res) => {
-  const {
-    dni,
-    nombre,
-    nombres,
-    apellido_paterno,
-    apellido_materno,
-    departamento,
-    direccion,
-    monto,
-    fecha_inicio,
-    fecha_fin
-  } = req.body;
-
-  if (!dni || !nombre) {
-    return res.json({ success: false, message: "Faltan datos obligatorios." });
-  }
-
-  db.run(
-    `INSERT INTO clientes (dni, nombre, fecha_nacimiento, direccion, departamento, provincia, distrito)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [dni, nombre, "", direccion, departamento, "", ""],
-    function (err) {
-      if (err) {
-        console.error("Error insertando cliente:", err);
-        return res.json({ success: false, message: "Error al registrar cliente (ya existe o DB error)." });
-      }
-
-      const id_cliente = this.lastID;
-      db.run(
-        `INSERT INTO prestamos (id_cliente, monto, fecha_inicio, fecha_fin)
-         VALUES (?, ?, ?, ?)`,
-        [id_cliente, monto, fecha_inicio, fecha_fin],
-        function (err2) {
-          if (err2) {
-            console.error("Error creando préstamo:", err2);
-            return res.json({ success: false, message: "Cliente creado sin préstamo (error de BD)." });
-          }
-
-          res.json({ success: true, message: "Cliente registrado correctamente con préstamo." });
-        }
-      );
-    }
-  );
-});
-
 
   db.all(query, [], (err, rows) => {
     if (err) {
       console.error("Error al obtener clientes:", err);
       return res.status(500).json({ success: false, message: "Error al obtener clientes" });
     }
-
     res.json({ success: true, clientes: rows });
   });
 });
+// 🔹 Crear/actualizar cliente y registrar préstamo + descontar fondos (transaccional)
+app.post('/api/clientes', (req, res) => {
+  if (!req.session.user) return res.status(401).json({ success: false, message: "No autenticado" });
+
+  const {
+    dni, nombre, nombres,
+    apellido_paterno, apellido_materno,
+    departamento, direccion,
+    monto, fecha_inicio, fecha_fin
+  } = req.body;
+
+  if (!dni || !nombre || !monto || !fecha_inicio || !fecha_fin) {
+    return res.json({ success: false, message: "Faltan datos obligatorios." });
+  }
+
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+
+    // 1) Verificar fondos
+    db.get("SELECT monto_total FROM fondos LIMIT 1", (err, rowFondos) => {
+      if (err) {
+        db.run("ROLLBACK");
+        return res.json({ success: false, message: "Error al verificar fondos." });
+      }
+      if (!rowFondos || rowFondos.monto_total < monto) {
+        db.run("ROLLBACK");
+        return res.json({ success: false, message: "Fondos insuficientes." });
+      }
+
+      // 2) Buscar cliente por DNI
+      db.get("SELECT id FROM clientes WHERE dni = ?", [dni], (errC, cli) => {
+        if (errC) {
+          db.run("ROLLBACK");
+          return res.json({ success: false, message: "Error al verificar cliente." });
+        }
+
+        const continuarConPrestamo = (id_cliente) => {
+          // 3) Insertar préstamo
+          db.run(
+            "INSERT INTO prestamos (id_cliente, monto, fecha_inicio, fecha_fin) VALUES (?, ?, ?, ?)",
+            [id_cliente, monto, fecha_inicio, fecha_fin],
+            function (errP) {
+              if (errP) {
+                console.error("Err préstamo:", errP);
+                db.run("ROLLBACK");
+                return res.json({ success: false, message: "Error al registrar préstamo." });
+              }
+
+              // 4) Descontar del fondo
+              db.run("UPDATE fondos SET monto_total = monto_total - ?", [monto], (errF) => {
+                if (errF) {
+                  console.error("Err fondos:", errF);
+                  db.run("ROLLBACK");
+                  return res.json({ success: false, message: "Cliente creado, pero error al descontar fondos." });
+                }
+
+                db.run("COMMIT", (errCommit) => {
+                  if (errCommit) {
+                    console.error("Err commit:", errCommit);
+                    db.run("ROLLBACK");
+                    return res.json({ success: false, message: "Error al confirmar la transacción." });
+                  }
+                  return res.json({ success: true, message: "Cliente/préstamo registrados y fondos actualizados." });
+                });
+              });
+            }
+          );
+        };
+
+        if (cli && cli.id) {
+          // Cliente existe: actualizar datos básicos (opcional) y continuar
+          db.run(
+            `UPDATE clientes 
+               SET nombre = ?, direccion = ?, departamento = ?
+             WHERE id = ?`,
+            [nombre, direccion || "", departamento || "", cli.id],
+            (errU) => {
+              if (errU) {
+                db.run("ROLLBACK");
+                return res.json({ success: false, message: "Error al actualizar cliente." });
+              }
+              continuarConPrestamo(cli.id);
+            }
+          );
+        } else {
+          // Cliente NO existe: crearlo y luego continuar
+          db.run(
+            `INSERT INTO clientes (dni, nombre, direccion, departamento, provincia, distrito, nombres, apellido_paterno, apellido_materno)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [dni, nombre, direccion || "", departamento || "", "", "", nombres || "", apellido_paterno || "", apellido_materno || ""],
+            function (errI) {
+              if (errI) {
+                console.error("Err cliente:", errI);
+                db.run("ROLLBACK");
+                return res.json({ success: false, message: "Error al registrar cliente." });
+              }
+              continuarConPrestamo(this.lastID);
+            }
+          );
+        }
+      });
+    });
+  });
+});
+
+
+
 
 // ==============================
 // 🔹 INICIAR SERVIDOR

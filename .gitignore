@@ -33,3 +33,7 @@ coverage/
 *.swp
 *.bak
 *.tmp
+
+#base de datos
+database.sqlite
+*.db
