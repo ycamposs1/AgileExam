@@ -29,6 +29,9 @@ exports.obtenerClientes = (req, res) => {
       c.dni,
       c.nombre,
       c.email,
+      c.tipo,
+      c.origen,
+      c.destino,
       IFNULL(p.tipo_prestamo, '') AS tipo_prestamo,
       IFNULL(p.tcea_aplicada, 0) AS tcea_aplicada,
       IFNULL(p.monto, 0) AS monto,
@@ -46,7 +49,6 @@ exports.obtenerClientes = (req, res) => {
       return res.status(500).json({ success: false, message: "Error al obtener clientes" });
     }
 
-    // 📊 Calculamos información adicional
     const clientes = rows.map(c => {
       const i = Math.pow(1 + parseFloat(c.tcea_aplicada || 0), 1 / 12) - 1;
       const n = c.plazo || 0;
@@ -65,6 +67,7 @@ exports.obtenerClientes = (req, res) => {
     res.json({ success: true, clientes });
   });
 };
+
 
 
 // =======================================================
@@ -101,168 +104,187 @@ exports.obtenerClientePorDni = (req, res) => {
   });
 };
 
-// =======================================================
-// 🔹 CREAR CLIENTE Y PRÉSTAMO
-// =======================================================
 exports.crearCliente = (req, res) => {
-  const {
-    dni,
-    email,
-    nombre,
-    nombres,
-    apellido_paterno,
-    apellido_materno,
-    departamento,
-    direccion,
-    monto,
-    plazo,
-    tipo_prestamo,
-    tcea_aplicada,
-    fecha_inicio,
-    fecha_fin
-  } = req.body;
+  try {
+    const {
+      dni,
+      email,
+      nombre,
+      nombres,
+      apellido_paterno,
+      apellido_materno,
+      departamento,
+      direccion,
+      monto,
+      plazo,
+      tipo_prestamo,
+      tcea_aplicada,
+      fecha_inicio,
+      fecha_fin,
+      tipo,        // natural | pep
+      origen,      // solo si pep
+      destino      // solo si pep
+    } = req.body;
 
-  // Validación de campos requeridos
-  if (!dni || !nombre || !email || !monto || !fecha_inicio || !fecha_fin || !tipo_prestamo || !tcea_aplicada) {
-    return res.status(400).json({
-      success: false,
-      message: "Faltan campos obligatorios."
-    });
-  }
-
-  // Verificar si el cliente ya tiene un préstamo activo
-  const verificarPrestamo = `
-    SELECT p.id FROM prestamos p
-    JOIN clientes c ON p.id_cliente = c.id
-    WHERE c.dni = ?;
-  `;
-
-  db.get(verificarPrestamo, [dni], (err, existingLoan) => {
-    if (err) {
-      console.error("Error verificando préstamo:", err);
-      return res.status(500).json({ success: false, message: "Error verificando préstamo." });
-    }
-
-    if (existingLoan) {
+    // 🔹 Validación flexible
+    if (!dni || !nombre || !email || !monto || !fecha_inicio || !fecha_fin || !tipo_prestamo || !tcea_aplicada || !tipo) {
       return res.status(400).json({
         success: false,
-        message: "❌ No se puede otorgar un nuevo préstamo: el cliente ya tiene una deuda pendiente."
+        message: "Faltan campos obligatorios."
       });
     }
 
-    // Verificar si el cliente ya existe
-    db.get("SELECT id FROM clientes WHERE dni = ?", [dni], (err, clienteExistente) => {
+    if (tipo === 'pep' && (!origen || !destino)) {
+      return res.status(400).json({
+        success: false,
+        message: "Debe especificar el origen y destino de los fondos para clientes PEP."
+      });
+    }
+
+    // 🔹 Verificar si el cliente ya tiene préstamo
+    const verificarPrestamo = `
+      SELECT p.id FROM prestamos p
+      JOIN clientes c ON p.id_cliente = c.id
+      WHERE c.dni = ?;
+    `;
+
+    db.get(verificarPrestamo, [dni], (err, existingLoan) => {
       if (err) {
-        console.error("Error verificando cliente:", err);
-        return res.status(500).json({ success: false, message: "Error al verificar cliente." });
+        console.error("Error verificando préstamo:", err);
+        return res.status(500).json({ success: false, message: "Error verificando préstamo." });
       }
 
-      if (clienteExistente) {
-        crearPrestamo(clienteExistente.id);
-      } else {
-        // Crear nuevo cliente con email
-        const insertarCliente = `
-          INSERT INTO clientes (dni, nombre, nombres, apellido_paterno, apellido_materno, departamento, direccion, email)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-        db.run(
-          insertarCliente,
-          [dni, nombre, nombres, apellido_paterno, apellido_materno, departamento, direccion, email],
-          function (err) {
-            if (err) {
-              console.error("Error al insertar cliente:", err);
-              return res.status(500).json({
-                success: false,
-                message: "Error al registrar cliente. Es posible que el DNI ya exista."
-              });
+      if (existingLoan) {
+        return res.status(400).json({
+          success: false,
+          message: "❌ No se puede otorgar un nuevo préstamo: el cliente ya tiene una deuda pendiente."
+        });
+      }
+
+      // 🔹 Verificar si el cliente ya existe
+      db.get("SELECT id FROM clientes WHERE dni = ?", [dni], (err, clienteExistente) => {
+        if (err) {
+          console.error("Error verificando cliente:", err);
+          return res.status(500).json({ success: false, message: "Error al verificar cliente." });
+        }
+
+        if (clienteExistente) {
+          crearPrestamo(clienteExistente.id);
+        } else {
+          // 🔹 Insertar nuevo cliente
+          const insertarCliente = `
+            INSERT INTO clientes 
+            (dni, nombre, nombres, apellido_paterno, apellido_materno, departamento, direccion, email, tipo, origen, destino)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `;
+          db.run(
+            insertarCliente,
+            [
+              dni,
+              nombre,
+              nombres,
+              apellido_paterno,
+              apellido_materno,
+              departamento,
+              direccion,
+              email,
+              tipo || 'natural',
+              tipo === 'pep' ? origen : null,
+              tipo === 'pep' ? destino : null
+            ],
+            function (err) {
+              if (err) {
+                console.error("Error al insertar cliente:", err);
+                return res.status(500).json({
+                  success: false,
+                  message: "Error al registrar cliente."
+                });
+              }
+              crearPrestamo(this.lastID);
             }
-            crearPrestamo(this.lastID);
-          }
-        );
-      }
-    });
-  });
-
-// ------------------------------
-// 🧩 Función auxiliar: Crear préstamo y cronograma
-// ------------------------------
-async function crearPrestamo(idCliente) {
-  const insertarPrestamo = `
-    INSERT INTO prestamos (id_cliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `;
-  db.run(insertarPrestamo, [idCliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin], async function (err) {
-    if (err) {
-      console.error("Error préstamo:", err);
-      return res.status(500).json({ success: false, message: "Error al registrar préstamo." });
-    }
-
-    // Actualizar fondo total
-    db.run("UPDATE fondos SET monto_total = monto_total - ?", [monto], async (err2) => {
-      if (err2) {
-        console.error("Error actualizando fondos:", err2);
-        return res.status(500).json({ success: false, message: "Error al actualizar fondo." });
-      }
-
-      // VALIDAR LUEGO 
-
-      // 🧮 Validar valores numéricos
-      const plazoNum = parseInt(plazo);
-      const tceaNum = parseFloat(tcea_aplicada);
-
-      if (isNaN(plazoNum) || plazoNum <= 0) {
-        console.error("❌ Plazo inválido o no definido:", plazo);
-        return res.status(400).json({ success: false, message: "El plazo del préstamo no es válido." });
-      }
-
-      // ✅ Generar cronograma con TCEA incluida
-      const pagos = generarCronograma(fecha_inicio, monto, plazoNum, tceaNum);
-      if (!pagos || pagos.length === 0) {
-        console.error("❌ No se generaron pagos correctamente.");
-        return res.status(500).json({ success: false, message: "Error generando cronograma de pagos." });
-      }
-
-      console.table(pagos);
-
-      // ✅ Generar PDF del cronograma
-      const pdfPath = `./cronograma_${dni}.pdf`;
-      await generarPDFCronograma({
-        nombre,
-        email,
-        tipo_prestamo,
-        monto,
-        plazo: plazoNum,
-        tcea_aplicada: tceaNum,
-        pagos
-      }, pdfPath);
-
-      // ✅ Enviar correo al cliente
-      await enviarCorreoConPDF(email, nombre, pdfPath, {
-        nombre,
-        email,
-        tipo_prestamo,
-        monto,
-        plazo: plazoNum,
-        tcea_aplicada: tceaNum,
-        pagos
+          );
+        }
       });
+    });
 
+    // 🔹 Crear préstamo
+function crearPrestamo(idCliente) {
+  try {
+    const insertarPrestamo = `
+      INSERT INTO prestamos (id_cliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
 
+    db.run(insertarPrestamo, [idCliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin], async function (err) {
+      if (err) {
+        console.error("Error préstamo:", err);
+        return res.status(500).json({ success: false, message: "Error al registrar préstamo." });
+      }
 
-      // ✅ Respuesta al frontend
+      console.log("✅ Préstamo registrado correctamente");
+
+      // Responder inmediatamente al frontend para evitar bloqueos
       res.json({
         success: true,
-        message: `✅ Cliente registrado correctamente y cronograma enviado a ${email}.`,
-        cronograma: pagos
+        message: `✅ Cliente y préstamo registrados correctamente. El cronograma será enviado a ${email}.`
       });
 
-      // 🧹 Limpieza del archivo temporal
-      setTimeout(() => {
-        fs.unlink(pdfPath, () => {});
-      }, 10000);
+      // ========================================================
+      // 📩 Generar PDF y enviar correo en segundo plano (async)
+      // ========================================================
+      try {
+        const pagos = generarCronograma(fecha_inicio, monto, plazo, tcea_aplicada);
+
+        // Generar archivo PDF temporal
+        const pdfPath = `./cronograma_${dni}.pdf`;
+
+        await generarPDFCronograma({
+          nombre,
+          email,
+          tipo_prestamo,
+          monto,
+          plazo,
+          tcea_aplicada,
+          pagos
+        }, pdfPath);
+
+        // Enviar correo con el PDF adjunto
+        await enviarCorreoConPDF(email, nombre, pdfPath, {
+          nombre,
+          email,
+          tipo_prestamo,
+          monto,
+          plazo,
+          tcea_aplicada,
+          pagos
+        });
+
+        console.log(`📤 Correo enviado correctamente a ${email}`);
+
+        // Borrar PDF después de unos segundos
+        setTimeout(() => {
+          fs.unlink(pdfPath, err => {
+            if (err) console.error("⚠️ Error borrando PDF temporal:", err);
+          });
+        }, 10000);
+      } catch (mailErr) {
+        console.error("❌ Error generando o enviando correo:", mailErr);
+      }
     });
-  });
+  } catch (err) {
+    console.error("❌ Error en crearPrestamo:", err);
+    return res.status(500).json({ success: false, message: "Error interno al crear préstamo." });
+  }
 }
+
+
+  } catch (err) {
+    console.error("❌ Error general en crearCliente:", err);
+    res.status(500).json({ success: false, message: "Error interno del servidor." });
+  }
+};
+
+
 
 
   // ------------------------------
@@ -285,7 +307,7 @@ async function crearPrestamo(idCliente) {
 
     return pagos;
   }
-};
+
 
 // =======================================================
 // 🔹 ELIMINAR CLIENTE Y SU PRÉSTAMO

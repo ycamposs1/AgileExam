@@ -32,6 +32,10 @@
           <th>Inicio</th>
           <th>Fin</th>
           <th>Operaciones</th>
+          <th>Tipo</th>
+          <th>Origen (si PEP)</th>
+          <th>Destino (si PEP)</th>
+
         </tr>
       </thead>
       <tbody></tbody>
@@ -41,6 +45,14 @@
   <!-- FORMULARIO -->
   <div class="section" id="crear-section">
     <form id="crearForm">
+
+      <label for="tipoCliente">Tipo de cliente</label>
+        <select id="tipoCliente" required>
+          <option value="natural" selected>Persona Natural</option>
+          <option value="pep">Persona Expuesta Políticamente (PEP)</option>
+        </select>
+
+
       <label for="dni">DNI</label>
       <div class="input-group">
         <input type="text" id="dni" maxlength="8" required placeholder="Ej: 12345678">
@@ -70,6 +82,16 @@
 
       <label for="dinero">Monto del préstamo (S/)</label>
       <input type="number" id="dinero" min="0" step="0.01" required>
+
+      <!-- Campos extra solo para PEP -->
+      <div id="camposPEP" style="display:none;">
+        <label for="origenFondos">Origen de los fondos</label>
+        <input type="text" id="origenFondos" placeholder="Ej: Ahorros, salario, negocio...">
+
+        <label for="destinoFondos">Destino de los fondos</label>
+        <input type="text" id="destinoFondos" placeholder="Ej: Compra de vehículo, inversión...">
+      </div>
+
 
       <label for="tipoPrestamo">Tipo de préstamo</label>
       <select id="tipoPrestamo" required>
@@ -142,6 +164,5 @@
   <script src="/js/clientes.js"></script>
 </body>
 </html>
-<script src="/js/utils.js" defer></script>
-<script src="/js/clientes.js" defer></script>
+
 

@@ -89,19 +89,24 @@ async function cargarClientes() {
     data.clientes.forEach(c => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${c.dni}</td>
-        <td>${c.nombre}</td>
-        <td>${c.tipo_prestamo || '-'}</td>
-        <td>${(c.tcea_aplicada * 100).toFixed(2)}%</td>
-        <td>${c.plazo || '-'}</td>
-        <td>S/ ${c.cuota_mensual}</td>
-        <td>S/ ${c.total_pagar}</td>
-        <td>${c.fecha_inicio || ''}</td>
-        <td>${c.fecha_fin || ''}</td>
-        <td class="actions">
-          <button onclick="verDetalle('${c.dni}')">👁️ Ver</button>
-          <button onclick="verCronograma('${c.dni}')">📅 Cronograma</button>
-        </td>
+        <tr>
+          <td>${c.dni}</td>
+          <td>${c.nombre}</td>
+          <td>${c.tipo_prestamo || '-'}</td>
+          <td>${(c.tcea_aplicada * 100).toFixed(2)}%</td>
+          <td>${c.plazo || '-'}</td>
+          <td>S/ ${c.cuota_mensual}</td>
+          <td>S/ ${c.total_pagar}</td>
+          <td>${c.fecha_inicio || ''}</td>
+          <td>${c.fecha_fin || ''}</td>
+          <td class="actions">
+            <button onclick="verDetalle('${c.dni}')">👁️ Ver</button>
+            <button onclick="verCronograma('${c.dni}')">📅 Cronograma</button>
+          </td>
+          <td>${c.tipo}</td>
+          <td>${c.origen || '-'}</td>
+          <td>${c.destino || '-'}</td>
+        </tr>
       `;
       tbody.appendChild(tr);
     });
@@ -149,21 +154,28 @@ async function guardarCliente(e) {
     : parseFloat(tceaSelect.value);
 
   const body = {
-    dni: dni.value.trim(),
-    email: email.value.trim(),
-    nombre: nombre.value.trim(),
-    nombres: nombres.value.trim(),
-    apellido_paterno: apellidoP.value.trim(),
-    apellido_materno: apellidoM.value.trim(),
-    departamento: departamento.value.trim(),
-    direccion: direccionCompleta.value.trim(),
-    monto: parseFloat(dinero.value),
-    plazo: parseInt(plazo.value),
-    tipo_prestamo: tipoPrestamo.value,
-    tcea_aplicada: tceaValue,
-    fecha_inicio: fechaInicio.value,
-    fecha_fin: fechaFin.value
+    dni: document.getElementById("dni").value.trim(),
+    email: document.getElementById("email").value.trim(),
+    nombre: document.getElementById("nombre").value.trim(),
+    nombres: document.getElementById("nombres").value.trim(),
+    apellido_paterno: document.getElementById("apellidoP").value.trim(),
+    apellido_materno: document.getElementById("apellidoM").value.trim(),
+    departamento: document.getElementById("departamento").value.trim(),
+    direccion: document.getElementById("direccionCompleta").value.trim(),
+    monto: parseFloat(document.getElementById("dinero").value),
+    plazo: parseInt(document.getElementById("plazo").value),
+    tipo_prestamo: document.getElementById("tipoPrestamo").value,
+    tcea_aplicada: (tceaSelect.value === "manual"
+      ? parseFloat(tceaManual.value) / 100
+      : parseFloat(tceaSelect.value)),
+    fecha_inicio: document.getElementById("fechaInicio").value,
+    fecha_fin: document.getElementById("fechaFin").value,
+    tipo: document.getElementById("tipoCliente").value,
+    origen: document.getElementById("origenFondos").value.trim(),
+    destino: document.getElementById("destinoFondos").value.trim()
   };
+
+
 
   try {
     const res = await fetch("/api/clientes", {
@@ -172,6 +184,7 @@ async function guardarCliente(e) {
       body: JSON.stringify(body)
     });
     const data = await res.json();
+
     mostrarMensaje(msgForm, data.message, data.success ? "success" : "error");
     if (data.success) cargarClientes();
   } catch {
@@ -281,3 +294,18 @@ btnEliminar.onclick = async () => {
 window.cerrarModal = () => {
   document.getElementById("modal").style.display = "none";
 };
+
+// Mostrar / ocultar campos PEP según el tipo seleccionado
+const tipoCliente = document.getElementById("tipoCliente");
+const camposPEP = document.getElementById("camposPEP");
+
+tipoCliente.addEventListener("change", () => {
+  if (tipoCliente.value === "pep") {
+    camposPEP.style.display = "block";
+  } else {
+    camposPEP.style.display = "none";
+    document.getElementById("origenFondos").value = "";
+    document.getElementById("destinoFondos").value = "";
+  }
+});
+
