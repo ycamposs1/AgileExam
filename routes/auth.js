@@ -19,13 +19,21 @@ router.post('/login', (req, res) => {
   const { username, password } = req.body;
 
   db.get("SELECT * FROM admin WHERE username = ?", [username], async (err, user) => {
-    if (err) return res.send("❌ Error al consultar la base de datos");
-    if (!user) return res.send("⚠️ Usuario no encontrado");
+    if (err) {
+      console.error("❌ Error en base de datos:", err);
+      return res.json({ success: false, message: "Error en el servidor." });
+    }
+
+    if (!user) {
+      return res.json({ success: false, message: "⚠️ Usuario no encontrado." });
+    }
 
     const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return res.send("❌ Contraseña incorrecta");
+    if (!valid) {
+      return res.json({ success: false, message: "❌ Contraseña incorrecta." });
+    }
 
-    // Guardar datos esenciales en sesión
+    // Guardar sesión
     req.session.user = {
       id: user.id,
       username: user.username,
@@ -33,9 +41,11 @@ router.post('/login', (req, res) => {
       movil: user.movil || null
     };
 
-    res.redirect('/admin');
+    // ✅ Responder al fetch con JSON
+    res.json({ success: true, message: "Inicio de sesión correcto." });
   });
 });
+
 
 // ==============================
 // 🔹 Cerrar sesión

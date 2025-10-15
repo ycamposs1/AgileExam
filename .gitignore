@@ -38,4 +38,6 @@ coverage/
 database.sqlite
 *.db
 data.db
+data.db*
+
 db.js
