@@ -34,7 +34,7 @@
   <!-- Pestañas -->
   <div class="tabs">
     <div class="tab active" id="tab-lista">📋 Lista de usuarios</div>
-    <div class="tab" id="tab-crear">➕ Crear usuario</div>
+    <div class="tab" id="tab-crear">➕ Crear cliente</div>
   </div>
 
   <!-- 🧾 LISTA DE CLIENTES -->
@@ -90,6 +90,29 @@
 
       <label for="dinero">Monto del préstamo (S/)</label>
       <input type="number" id="dinero" min="0" step="0.01" required>
+
+      <!-- 🔹 Tipo de préstamo -->
+      <label for="tipoPrestamo">Tipo de préstamo</label>
+      <select id="tipoPrestamo" required>
+        <option value="">Seleccione...</option>
+        <option value="personal">Personal</option>
+        <option value="vehicular">Vehicular</option>
+        <option value="hipotecario">Hipotecario</option>
+        <option value="educativo">Educativo</option>
+      </select>
+
+      <!-- 🔹 Selección de TCEA -->
+      <label for="tceaSelect">TCEA (%)</label>
+      <select id="tceaSelect" required>
+        <option value="">Seleccione tipo de préstamo primero</option>
+      </select>
+
+      <!-- Campo TCEA manual -->
+      <div id="tceaManualContainer" style="display:none;">
+        <label for="tceaManual">TCEA personalizada (%)</label>
+        <input type="number" id="tceaManual" min="0" max="200" step="0.01" placeholder="Ej: 18.5">
+      </div>
+
 
       <label for="fechaInicio">Fecha de inicio</label>
       <input type="date" id="fechaInicio" readonly>
@@ -265,6 +288,23 @@
       msgForm.textContent = "Guardando cliente...";
       msgForm.className = "loading";
 
+
+      // Obtener TCEA elegida
+      let tceaAplicada = parseFloat(tceaSelect.value);
+      if (tceaSelect.value === "manual") {
+        const manual = parseFloat(tceaManual.value);
+        if (isNaN(manual) || manual <= 0 || manual > 200) {
+          alert("Ingrese una TCEA válida (0% - 200%)");
+          return;
+        }
+        tceaAplicada = manual / 100; // convertir de porcentaje a decimal
+      } else {
+        tceaAplicada = tceaAplicada; // ya viene en decimal
+      }
+
+
+
+
       const body = {
         dni: document.getElementById("dni").value.trim(),
         nombre: document.getElementById("nombre").value.trim(),
@@ -276,7 +316,9 @@
         email: document.getElementById("email").value.trim(),
         monto: parseFloat(document.getElementById("dinero").value),
         fecha_inicio: document.getElementById("fechaInicio").value,
-        fecha_fin: document.getElementById("fechaFin").value
+        fecha_fin: document.getElementById("fechaFin").value,
+        tipo_prestamo: tipoPrestamoSelect.value,
+        tcea_aplicada: tceaAplicada
       };
 
       try {
@@ -374,11 +416,64 @@ document.getElementById("btnEliminar").addEventListener("click", async () => {
   }
 });
 
+// ========= CONFIGURACIÓN DE TIPO DE PRÉSTAMO Y TCEA =========
+const tipoPrestamoSelect = document.getElementById("tipoPrestamo");
+const tceaSelect = document.getElementById("tceaSelect");
+const tceaManualContainer = document.getElementById("tceaManualContainer");
+const tceaManual = document.getElementById("tceaManual");
+
+// Tabla base de TCEA según tipo de préstamo
+const tiposTCEA = {
+  personal: 0.26,
+  vehicular: 0.15,
+  hipotecario: 0.102,
+  educativo: 0.168
+};
+
+// Cada vez que cambia el tipo de préstamo
+tipoPrestamoSelect.addEventListener("change", () => {
+  const tipo = tipoPrestamoSelect.value;
+  tceaSelect.innerHTML = "";
+
+  if (!tipo) {
+    tceaSelect.innerHTML = "<option value=''>Seleccione tipo de préstamo primero</option>";
+    return;
+  }
+
+  const base = tiposTCEA[tipo];
+  const opciones = [
+    (base * 0.9).toFixed(3),  // -10%
+    base.toFixed(3),          // base
+    (base * 1.1).toFixed(3),  // +10%
+    "manual"
+  ];
+
+  tceaSelect.innerHTML = `
+    <option value="">Seleccione una opción</option>
+    <option value="${opciones[0]}">${(opciones[0]*100).toFixed(1)}% (TCEA baja recomendada)</option>
+    <option value="${opciones[1]}">${(opciones[1]*100).toFixed(1)}% (TCEA estándar)</option>
+    <option value="${opciones[2]}">${(opciones[2]*100).toFixed(1)}% (TCEA alta recomendada)</option>
+    <option value="manual">Ingresar TCEA personalizada</option>
+  `;
+
+  tceaManualContainer.style.display = "none";
+  tceaManual.value = "";
+});
+
+// Mostrar campo manual si elige "personalizada"
+tceaSelect.addEventListener("change", () => {
+  if (tceaSelect.value === "manual") {
+    tceaManualContainer.style.display = "block";
+  } else {
+    tceaManualContainer.style.display = "none";
+    tceaManual.value = "";
+  }
+});
 
 
 
 function cerrarModal() {
-  document.getElementById("modal").style.display = "none";
+  document.getElementById("modal").style.display = "none"; //OCULTAR MODAL SI SALE ERROR CAMBIAR ORDEN Y PONER AL FINAL
 }
 
 

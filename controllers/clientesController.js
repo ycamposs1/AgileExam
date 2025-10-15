@@ -1,7 +1,7 @@
 const db = require('../db');
 
 // =======================================================
-// 🔹 LISTAR CLIENTES (con nombre, email y préstamo asociado)
+// 🔹 LISTAR CLIENTES (con nombre, email, tipo y préstamo asociado)
 // =======================================================
 exports.obtenerClientes = (req, res) => {
   const query = `
@@ -9,6 +9,8 @@ exports.obtenerClientes = (req, res) => {
       c.dni,
       c.nombre,
       c.email,
+      IFNULL(p.tipo_prestamo, '') AS tipo_prestamo,
+      IFNULL(p.tcea_aplicada, 0) AS tcea_aplicada,
       IFNULL(p.monto, 0) AS monto,
       IFNULL(p.fecha_inicio, '') AS fecha_inicio,
       IFNULL(p.fecha_fin, '') AS fecha_fin
@@ -36,7 +38,10 @@ exports.obtenerClientePorDni = (req, res) => {
   const query = `
     SELECT 
       c.*, 
+      IFNULL(p.tipo_prestamo, '') AS tipo_prestamo,
+      IFNULL(p.tcea_aplicada, 0) AS tcea_aplicada,
       IFNULL(p.monto, 0) AS monto, 
+      IFNULL(p.plazo, 0) AS plazo,
       IFNULL(p.fecha_inicio, '') AS fecha_inicio, 
       IFNULL(p.fecha_fin, '') AS fecha_fin
     FROM clientes c
@@ -73,12 +78,14 @@ exports.crearCliente = (req, res) => {
     direccion,
     monto,
     plazo,
+    tipo_prestamo,
+    tcea_aplicada,
     fecha_inicio,
     fecha_fin
   } = req.body;
 
   // Validación de campos requeridos
-  if (!dni || !nombre || !email || !monto || !fecha_inicio || !fecha_fin) {
+  if (!dni || !nombre || !email || !monto || !fecha_inicio || !fecha_fin || !tipo_prestamo || !tcea_aplicada) {
     return res.status(400).json({
       success: false,
       message: "Faltan campos obligatorios."
@@ -143,10 +150,10 @@ exports.crearCliente = (req, res) => {
   // ------------------------------
   function crearPrestamo(idCliente) {
     const insertarPrestamo = `
-      INSERT INTO prestamos (id_cliente, monto, fecha_inicio, fecha_fin, plazo)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO prestamos (id_cliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
-    db.run(insertarPrestamo, [idCliente, monto, fecha_inicio, fecha_fin, plazo], function (err) {
+    db.run(insertarPrestamo, [idCliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin], function (err) {
       if (err) {
         console.error("Error préstamo:", err);
         return res.status(500).json({ success: false, message: "Error al registrar préstamo." });
@@ -159,8 +166,8 @@ exports.crearCliente = (req, res) => {
           return res.status(500).json({ success: false, message: "Error al actualizar fondo." });
         }
 
-        // ✅ Generar cronograma simple
-        const pagos = generarCronograma(fecha_inicio, monto, plazo);
+        // ✅ Generar cronograma con TCEA incluida
+        const pagos = generarCronograma(fecha_inicio, monto, plazo, tcea_aplicada);
         console.table(pagos);
 
         res.json({
@@ -173,19 +180,20 @@ exports.crearCliente = (req, res) => {
   }
 
   // ------------------------------
-  // 🧮 Función auxiliar: Cronograma de pagos mensuales
+  // 🧮 Función auxiliar: Cronograma con TCEA
   // ------------------------------
-  function generarCronograma(fechaInicio, montoTotal, meses) {
+  function generarCronograma(fechaInicio, montoTotal, meses, tcea) {
     const pagos = [];
-    const montoMensual = (montoTotal / meses).toFixed(2);
+    const i = Math.pow(1 + parseFloat(tcea), 1 / 12) - 1; // tasa mensual
+    const cuota = montoTotal * (i / (1 - Math.pow(1 + i, -meses))); // fórmula de anualidades
     let fecha = new Date(fechaInicio);
 
-    for (let i = 1; i <= meses; i++) {
+    for (let n = 1; n <= meses; n++) {
       fecha.setMonth(fecha.getMonth() + 1);
       pagos.push({
-        nro_cuota: i,
+        nro_cuota: n,
         fecha_pago: fecha.toISOString().split('T')[0],
-        monto: parseFloat(montoMensual)
+        monto: parseFloat(cuota.toFixed(2))
       });
     }
 
