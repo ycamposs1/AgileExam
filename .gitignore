@@ -37,3 +37,5 @@ coverage/
 #base de datos
 database.sqlite
 *.db
+data.db
+db.js

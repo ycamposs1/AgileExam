@@ -1,14 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { listarClientes, crearCliente, eliminarCliente } = require('../controllers/clientesController');
+const clientesController = require('../controllers/clientesController'); // 👈 ESTA LÍNEA ES CLAVE
 
-// Lista de clientes
-router.get('/clientes', listarClientes);
+// Rutas principales de clientes
+router.get('/clientes', clientesController.obtenerClientes);
+router.post('/clientes', clientesController.crearCliente);
 
-// Crear cliente con préstamo
-router.post('/clientes', crearCliente);
-
-// Eliminar cliente (para pruebas)
-router.delete('/clientes/:dni', eliminarCliente);
+// 🧾 Nueva ruta para eliminar cliente por DNI
+router.delete('/clientes/:dni', clientesController.eliminarCliente);
 
 module.exports = router;
