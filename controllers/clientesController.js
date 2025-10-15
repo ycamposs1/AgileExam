@@ -21,7 +21,7 @@ const transporter = nodemailer.createTransport({
 
 
 // =======================================================
-// 🔹 LISTAR CLIENTES (con nombre, email, tipo y préstamo asociado)
+// 🔹 LISTAR CLIENTES (con detalles financieros)
 // =======================================================
 exports.obtenerClientes = (req, res) => {
   const query = `
@@ -32,6 +32,7 @@ exports.obtenerClientes = (req, res) => {
       IFNULL(p.tipo_prestamo, '') AS tipo_prestamo,
       IFNULL(p.tcea_aplicada, 0) AS tcea_aplicada,
       IFNULL(p.monto, 0) AS monto,
+      IFNULL(p.plazo, 0) AS plazo,
       IFNULL(p.fecha_inicio, '') AS fecha_inicio,
       IFNULL(p.fecha_fin, '') AS fecha_fin
     FROM clientes c
@@ -45,9 +46,26 @@ exports.obtenerClientes = (req, res) => {
       return res.status(500).json({ success: false, message: "Error al obtener clientes" });
     }
 
-    res.json({ success: true, clientes: rows });
+    // 📊 Calculamos información adicional
+    const clientes = rows.map(c => {
+      const i = Math.pow(1 + parseFloat(c.tcea_aplicada || 0), 1 / 12) - 1;
+      const n = c.plazo || 0;
+      const cuota = n > 0 && i > 0
+        ? c.monto * (i / (1 - Math.pow(1 + i, -n)))
+        : 0;
+      const totalPagar = cuota * n;
+
+      return {
+        ...c,
+        cuota_mensual: cuota.toFixed(2),
+        total_pagar: totalPagar.toFixed(2)
+      };
+    });
+
+    res.json({ success: true, clientes });
   });
 };
+
 
 // =======================================================
 // 🔹 OBTENER DETALLE DE CLIENTE POR DNI
@@ -187,7 +205,7 @@ async function crearPrestamo(idCliente) {
       }
 
       // VALIDAR LUEGO 
-      
+
       // 🧮 Validar valores numéricos
       const plazoNum = parseInt(plazo);
       const tceaNum = parseFloat(tcea_aplicada);

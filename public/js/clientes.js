@@ -91,12 +91,20 @@ async function cargarClientes() {
       tr.innerHTML = `
         <td>${c.dni}</td>
         <td>${c.nombre}</td>
-        <td>${Number(c.monto).toFixed(2)}</td>
+        <td>${c.tipo_prestamo || '-'}</td>
+        <td>${(c.tcea_aplicada * 100).toFixed(2)}%</td>
+        <td>${c.plazo || '-'}</td>
+        <td>S/ ${c.cuota_mensual}</td>
+        <td>S/ ${c.total_pagar}</td>
         <td>${c.fecha_inicio || ''}</td>
         <td>${c.fecha_fin || ''}</td>
-        <td class="actions"><button onclick="verDetalle('${c.dni}')">👁️ Ver</button></td>`;
+        <td class="actions">
+          <button onclick="verDetalle('${c.dni}')">👁️ Ver</button>
+        </td>
+      `;
       tbody.appendChild(tr);
     });
+
   } catch {
     mostrarMensaje(msg, "Error al cargar la lista.", "error");
   }
