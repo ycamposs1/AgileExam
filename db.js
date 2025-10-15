@@ -48,6 +48,18 @@ db.run(`CREATE TABLE IF NOT EXISTS prestamos (
   FOREIGN KEY (id_cliente) REFERENCES clientes (id)
 )`);
 
+db.run(`
+  CREATE TABLE IF NOT EXISTS actividad (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha TEXT NOT NULL,
+    id_prestamo INTEGER,
+    dni_cliente TEXT,
+    tipo TEXT,           -- "Préstamo otorgado" | "Pago completado"
+    monto REAL,
+    descripcion TEXT
+  )
+`);
+
 
 
 

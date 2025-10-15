@@ -7,6 +7,8 @@ const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const clientesRoutes = require('./routes/clientes');
 const reniecRoutes = require('./routes/reniec');
+const actividadRoutes = require('./routes/actividad');
+
 
 const app = express();
 
@@ -23,13 +25,17 @@ app.use(session({
   cookie: { maxAge: 1000 * 60 * 15, httpOnly: true, sameSite: 'lax' }
 }));
 
-const pageRoutes = require('./routes/pages');
 
 // Rutas
 app.use('/', authRoutes);
 app.use('/api', adminRoutes);
 app.use('/api', clientesRoutes);
 app.use('/api', reniecRoutes);
+app.use('/api', actividadRoutes);
+
+
+const pageRoutes = require('./routes/pages');
+
 app.use('/', pageRoutes);
 
 // Servidor

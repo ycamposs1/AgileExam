@@ -1,8 +1,56 @@
 <!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"><title>Registro de Actividad</title></head>
+<head>
+  <meta charset="UTF-8">
+  <title>Registro de Actividad</title>
+  <link rel="stylesheet" href="/css/clientes.css">
+</head>
 <body>
-  <h2>Registro de Actividad</h2>
-  <p>Visualiza movimientos, accesos y auditorías del sistema.</p>
+  <h2>📜 Registro de Actividad</h2>
+  <div class="tabla-container">
+    <table id="tabla-actividad">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Fecha</th>
+          <th>ID Préstamo</th>
+          <th>DNI Cliente</th>
+          <th>Tipo</th>
+          <th>Monto (S/)</th>
+          <th>Descripción</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    async function cargarActividad() {
+      const tbody = document.querySelector('#tabla-actividad tbody');
+      tbody.innerHTML = '<tr><td colspan="7">Cargando...</td></tr>';
+
+      const res = await fetch('/api/actividad');
+      const data = await res.json();
+
+      if (!data.success || !data.movimientos.length) {
+        tbody.innerHTML = '<tr><td colspan="7">No hay movimientos registrados.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.movimientos.map(m => `
+        <tr>
+          <td>${m.id}</td>
+          <td>${m.fecha}</td>
+          <td>${m.id_prestamo || '-'}</td>
+          <td>${m.dni_cliente}</td>
+          <td>${m.tipo}</td>
+          <td>${m.monto.toFixed(2)}</td>
+          <td>${m.descripcion}</td>
+        </tr>
+      `).join('');
+    }
+
+    document.addEventListener('DOMContentLoaded', cargarActividad);
+  </script>
 </body>
 </html>

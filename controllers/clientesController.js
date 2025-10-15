@@ -208,81 +208,92 @@ exports.crearCliente = (req, res) => {
     });
 
     // 🔹 Crear préstamo
-function crearPrestamo(idCliente) {
-  try {
-    const insertarPrestamo = `
-      INSERT INTO prestamos (id_cliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    db.run(insertarPrestamo, [idCliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin], async function (err) {
-      if (err) {
-        console.error("Error préstamo:", err);
-        return res.status(500).json({ success: false, message: "Error al registrar préstamo." });
-      }
-
-      console.log("✅ Préstamo registrado correctamente");
-
-      // Responder inmediatamente al frontend para evitar bloqueos
-      res.json({
-        success: true,
-        message: `✅ Cliente y préstamo registrados correctamente. El cronograma será enviado a ${email}.`
-      });
-
-      // ========================================================
-      // 📩 Generar PDF y enviar correo en segundo plano (async)
-      // ========================================================
+    function crearPrestamo(idCliente) {
       try {
-        const pagos = generarCronograma(fecha_inicio, monto, plazo, tcea_aplicada);
+        const insertarPrestamo = `
+          INSERT INTO prestamos (id_cliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `;
 
-        // Generar archivo PDF temporal
-        const pdfPath = `./cronograma_${dni}.pdf`;
+        db.run(insertarPrestamo, [idCliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin], async function (err) {
+          if (err) {
+            console.error("Error préstamo:", err);
+            return res.status(500).json({ success: false, message: "Error al registrar préstamo." });
+          }
 
-        await generarPDFCronograma({
-          nombre,
-          email,
-          tipo_prestamo,
-          monto,
-          plazo,
-          tcea_aplicada,
-          pagos
-        }, pdfPath);
+          const idPrestamo = this.lastID;
+          console.log(`✅ Préstamo registrado correctamente (ID: ${idPrestamo})`);
 
-        // Enviar correo con el PDF adjunto
-        await enviarCorreoConPDF(email, nombre, pdfPath, {
-          nombre,
-          email,
-          tipo_prestamo,
-          monto,
-          plazo,
-          tcea_aplicada,
-          pagos
-        });
+          // Registrar actividad
+          const fechaActual = new Date().toISOString().split('T')[0];
+          db.run(
+            `INSERT INTO actividad (fecha, id_prestamo, dni_cliente, tipo, monto, descripcion)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+            [fechaActual, idPrestamo, dni, "Préstamo otorgado", -monto, `Se otorgó un préstamo de S/ ${monto} al cliente ${nombre}`],
+            (err2) => {
+              if (err2) console.error("Error registrando actividad:", err2);
+              else console.log(`🧾 Actividad registrada: Préstamo otorgado (ID ${idPrestamo})`);
+            }
+          );
 
-        console.log(`📤 Correo enviado correctamente a ${email}`);
-
-        // Borrar PDF después de unos segundos
-        setTimeout(() => {
-          fs.unlink(pdfPath, err => {
-            if (err) console.error("⚠️ Error borrando PDF temporal:", err);
+          // Responder al frontend inmediatamente
+          res.json({
+            success: true,
+            message: `✅ Cliente y préstamo registrados correctamente. El cronograma será enviado a ${email}.`
           });
-        }, 10000);
-      } catch (mailErr) {
-        console.error("❌ Error generando o enviando correo:", mailErr);
+
+          // ========================================================
+          // 📩 Generar PDF y enviar correo en segundo plano (async)
+          // ========================================================
+          try {
+            const pagos = generarCronograma(fecha_inicio, monto, plazo, tcea_aplicada);
+            const pdfPath = `./cronograma_${dni}.pdf`;
+
+            await generarPDFCronograma({
+              nombre,
+              email,
+              tipo_prestamo,
+              monto,
+              plazo,
+              tcea_aplicada,
+              pagos
+            }, pdfPath);
+
+            await enviarCorreoConPDF(email, nombre, pdfPath, {
+              nombre,
+              email,
+              tipo_prestamo,
+              monto,
+              plazo,
+              tcea_aplicada,
+              pagos
+            });
+
+            console.log(`📤 Correo enviado correctamente a ${email}`);
+
+            // Borrar PDF temporal
+            setTimeout(() => {
+              fs.unlink(pdfPath, err => {
+                if (err) console.error("⚠️ Error borrando PDF temporal:", err);
+              });
+            }, 10000);
+          } catch (mailErr) {
+            console.error("❌ Error generando o enviando correo:", mailErr);
+          }
+        });
+      } catch (err) {
+        console.error("❌ Error en crearPrestamo:", err);
+        res.status(500).json({ success: false, message: "Error interno al crear préstamo." });
       }
-    });
-  } catch (err) {
-    console.error("❌ Error en crearPrestamo:", err);
-    return res.status(500).json({ success: false, message: "Error interno al crear préstamo." });
-  }
-}
-
-
-  } catch (err) {
+    }  } catch (err) {
     console.error("❌ Error general en crearCliente:", err);
     res.status(500).json({ success: false, message: "Error interno del servidor." });
   }
-};
+}; // 👈 Cierra correctamente exports.crearCliente
+
+    
+
+
 
 
 
@@ -327,22 +338,56 @@ exports.eliminarCliente = (req, res) => {
         return res.json({ success: false, message: "Cliente no encontrado" });
       }
 
-      db.run("DELETE FROM prestamos WHERE id_cliente = ?", [cliente.id], (err2) => {
-        if (err2) {
+      db.get(`
+        SELECT p.id AS id_prestamo, p.monto, p.plazo, p.tcea_aplicada
+        FROM prestamos p WHERE p.id_cliente = ?
+      `, [cliente.id], (err, prestamo) => {
+        if (err || !prestamo) {
           db.run("ROLLBACK");
-          return res.json({ success: false, message: "Error al eliminar préstamo" });
+          return res.json({ success: false, message: "Error al recuperar préstamo antes de eliminar." });
         }
 
-        db.run("DELETE FROM clientes WHERE id = ?", [cliente.id], (err3) => {
-          if (err3) {
+        // Calcular total pagado (cuotas con interés)
+        const i = Math.pow(1 + parseFloat(prestamo.tcea_aplicada), 1 / 12) - 1;
+        const cuota = prestamo.monto * (i / (1 - Math.pow(1 + i, -prestamo.plazo)));
+        const totalPagado = cuota * prestamo.plazo;
+
+        // Sumar el total al fondo
+        db.run("UPDATE fondos SET monto_total = monto_total + ?", [totalPagado], (err2) => {
+          if (err2) console.error("Error sumando fondo:", err2);
+        });
+
+        // Registrar en tabla actividad
+        const fecha = new Date().toISOString().split('T')[0];
+        db.run(
+          `INSERT INTO actividad (fecha, id_prestamo, dni_cliente, tipo, monto, descripcion)
+          VALUES (?, ?, ?, ?, ?, ?)`,
+          [fecha, prestamo.id_prestamo, dni, "Pago completado", totalPagado, `El cliente pagó su préstamo (incluye intereses)`],
+          (err3) => {
+            if (err3) console.error("Error registrando pago:", err3);
+            else console.log(`💰 Actividad registrada: Pago completado por ${dni}`);
+          }
+        );
+
+        // Luego eliminas los registros normales
+        db.run("DELETE FROM prestamos WHERE id_cliente = ?", [cliente.id], (errDelPrestamo) => {
+          if (errDelPrestamo) {
             db.run("ROLLBACK");
-            return res.json({ success: false, message: "Error al eliminar cliente" });
+            return res.json({ success: false, message: "Error al eliminar préstamo" });
           }
 
-          db.run("COMMIT");
-          res.json({ success: true, message: "✅ Cliente eliminado correctamente." });
+          db.run("DELETE FROM clientes WHERE id = ?", [cliente.id], (errDelCliente) => {
+            if (errDelCliente) {
+              db.run("ROLLBACK");
+              return res.json({ success: false, message: "Error al eliminar cliente" });
+            }
+
+            db.run("COMMIT");
+            res.json({ success: true, message: "✅ Cliente eliminado y pago registrado en actividad." });
+          });
         });
       });
+
     });
   });
 };

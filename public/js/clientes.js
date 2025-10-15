@@ -308,4 +308,3 @@ tipoCliente.addEventListener("change", () => {
     document.getElementById("destinoFondos").value = "";
   }
 });
-
