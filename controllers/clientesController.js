@@ -1,4 +1,24 @@
 const db = require('../db');
+const nodemailer = require('nodemailer');
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
+require('dotenv').config();
+
+
+
+// =======================================================
+// 🔹 CONFIGURACIÓN DE TRANSPORTADOR DE CORREO
+// =======================================================
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+});
+
 
 // =======================================================
 // 🔹 LISTAR CLIENTES (con nombre, email, tipo y préstamo asociado)
@@ -145,39 +165,61 @@ exports.crearCliente = (req, res) => {
     });
   });
 
-  // ------------------------------
-  // 🧩 Función auxiliar: Crear préstamo y cronograma
-  // ------------------------------
-  function crearPrestamo(idCliente) {
-    const insertarPrestamo = `
-      INSERT INTO prestamos (id_cliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
-    db.run(insertarPrestamo, [idCliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin], function (err) {
-      if (err) {
-        console.error("Error préstamo:", err);
-        return res.status(500).json({ success: false, message: "Error al registrar préstamo." });
+// ------------------------------
+// 🧩 Función auxiliar: Crear préstamo y cronograma
+// ------------------------------
+async function crearPrestamo(idCliente) {
+  const insertarPrestamo = `
+    INSERT INTO prestamos (id_cliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `;
+  db.run(insertarPrestamo, [idCliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin], async function (err) {
+    if (err) {
+      console.error("Error préstamo:", err);
+      return res.status(500).json({ success: false, message: "Error al registrar préstamo." });
+    }
+
+    // Actualizar fondo total
+    db.run("UPDATE fondos SET monto_total = monto_total - ?", [monto], async (err2) => {
+      if (err2) {
+        console.error("Error actualizando fondos:", err2);
+        return res.status(500).json({ success: false, message: "Error al actualizar fondo." });
       }
 
-      // Actualizar fondo total
-      db.run("UPDATE fondos SET monto_total = monto_total - ?", [monto], (err2) => {
-        if (err2) {
-          console.error("Error actualizando fondos:", err2);
-          return res.status(500).json({ success: false, message: "Error al actualizar fondo." });
-        }
+      // ✅ Generar cronograma con TCEA incluida
+      const pagos = generarCronograma(fecha_inicio, monto, plazo, tcea_aplicada);
+      console.table(pagos);
 
-        // ✅ Generar cronograma con TCEA incluida
-        const pagos = generarCronograma(fecha_inicio, monto, plazo, tcea_aplicada);
-        console.table(pagos);
+      // ✅ Generar PDF del cronograma
+      const pdfPath = `./cronograma_${dni}.pdf`;
+      await generarPDFCronograma({
+        nombre,
+        email,
+        tipo_prestamo,
+        monto,
+        plazo,
+        tcea_aplicada,
+        pagos
+      }, pdfPath);
 
-        res.json({
-          success: true,
-          message: "✅ Cliente registrado y préstamo asignado correctamente.",
-          cronograma: pagos
-        });
+      // ✅ Enviar correo al cliente
+      await enviarCorreoConPDF(email, nombre, pdfPath);
+
+      // ✅ Respuesta al frontend
+      res.json({
+        success: true,
+        message: `✅ Cliente registrado correctamente y cronograma enviado a ${email}.`,
+        cronograma: pagos
       });
+
+      // 🧹 Limpieza del archivo temporal
+      setTimeout(() => {
+        fs.unlink(pdfPath, () => {});
+      }, 10000);
     });
-  }
+  });
+}
+
 
   // ------------------------------
   // 🧮 Función auxiliar: Cronograma con TCEA
@@ -238,3 +280,78 @@ exports.eliminarCliente = (req, res) => {
     });
   });
 };
+// =======================================================
+// 🔹 FUNCIÓN PARA GENERAR PDF DEL CRONOGRAMA
+// =======================================================
+async function generarPDFCronograma(datos, rutaArchivo) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument();
+    const stream = fs.createWriteStream(rutaArchivo);
+    doc.pipe(stream);
+
+    doc.fontSize(18).text("📄 Cronograma de Pagos", { align: "center" });
+    doc.moveDown();
+
+    doc.fontSize(12).text(`Cliente: ${datos.nombre}`);
+    doc.text(`Correo: ${datos.email}`);
+    doc.text(`Tipo de préstamo: ${datos.tipo_prestamo}`);
+    doc.text(`Monto total: S/ ${datos.monto.toFixed(2)}`);
+    doc.text(`Plazo: ${datos.plazo} meses`);
+    doc.text(`TCEA aplicada: ${(datos.tcea_aplicada * 100).toFixed(2)}%`);
+    doc.moveDown();
+
+    doc.fontSize(13).text("Detalle de cuotas:");
+    doc.moveDown(0.5);
+
+    // Encabezado tabla
+    doc.fontSize(11);
+    doc.text("N° Cuota", 50);
+    doc.text("Fecha de pago", 150);
+    doc.text("Monto (S/)", 300);
+    doc.moveDown(0.5);
+
+    // Detalle de pagos
+    datos.pagos.forEach(p => {
+      doc.text(p.nro_cuota.toString(), 50);
+      doc.text(p.fecha_pago, 150);
+      doc.text(p.monto.toFixed(2), 300);
+    });
+
+    doc.end();
+    stream.on('finish', resolve);
+    stream.on('error', reject);
+  });
+}
+
+// =======================================================
+// 🔹 FUNCIÓN PARA ENVIAR CORREO CON PDF ADJUNTO
+// =======================================================
+async function enviarCorreoConPDF(destinatario, nombreCliente, pdfPath) {
+  const mailOptions = {
+    from: `"Banco Brar" <${process.env.SMTP_FROM}>`,
+    to: destinatario,
+    subject: "Cronograma de pagos de tu préstamo",
+    html: `
+      <p>Estimado/a <strong>${nombreCliente}</strong>,</p>
+      <p>Adjunto encontrarás tu cronograma de pagos correspondiente a tu préstamo registrado en nuestro sistema.</p>
+      <p>Por favor, revisa las fechas de pago y los montos correspondientes.</p>
+      <p>Gracias por confiar en nosotros.</p>
+      <br>
+      <p><strong>Atentamente,</strong><br>Equipo de FinanzasApp</p>
+    `,
+    attachments: [
+      {
+        filename: 'Cronograma_Pagos.pdf',
+        path: pdfPath
+      }
+    ]
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`📤 Correo enviado a ${destinatario}`);
+  } catch (err) {
+    console.error("❌ Error enviando correo:", err);
+  }
+}
+
