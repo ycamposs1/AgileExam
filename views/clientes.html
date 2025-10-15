@@ -93,19 +93,19 @@
 
       <!-- 🔹 Tipo de préstamo -->
       <label for="tipoPrestamo">Tipo de préstamo</label>
-      <select id="tipoPrestamo" required>
-        <option value="">Seleccione...</option>
-        <option value="personal">Personal</option>
-        <option value="vehicular">Vehicular</option>
-        <option value="hipotecario">Hipotecario</option>
-        <option value="educativo">Educativo</option>
-      </select>
+        <select id="tipoPrestamo" required>
+          <option value="">Seleccione...</option>
+          <option value="personal">Personal</option>
+          <option value="vehicular">Vehicular</option>
+          <option value="hipotecario">Hipotecario</option>
+          <option value="educativo">Educativo</option>
+        </select>
 
       <!-- 🔹 Selección de TCEA -->
       <label for="tceaSelect">TCEA (%)</label>
-      <select id="tceaSelect" required>
-        <option value="">Seleccione tipo de préstamo primero</option>
-      </select>
+        <select id="tceaSelect" required>
+          <option value="">Seleccione tipo de préstamo primero</option>
+        </select>
 
       <!-- Campo TCEA manual -->
       <div id="tceaManualContainer" style="display:none;">
@@ -118,14 +118,14 @@
       <input type="date" id="fechaInicio" readonly>
 
       <label for="plazo">Plazo (pago)</label>
-      <select id="plazo" required>
-        <option value="">Seleccione...</option>
-        <option value="3">3 meses</option>
-        <option value="6">6 meses</option>
-        <option value="9">9 meses</option>
-        <option value="12">12 meses</option>
-        <option value="24">24 meses</option>
-      </select>
+        <select id="plazo" required>
+          <option value="">Seleccione...</option>
+          <option value="3">3 meses</option>
+          <option value="6">6 meses</option>
+          <option value="9">9 meses</option>
+          <option value="12">12 meses</option>
+          <option value="24">24 meses</option>
+        </select>
 
       <label for="fechaFin">Fecha de fin</label>
       <input type="date" id="fechaFin" readonly>
@@ -288,7 +288,6 @@
       msgForm.textContent = "Guardando cliente...";
       msgForm.className = "loading";
 
-
       // Obtener TCEA elegida
       let tceaAplicada = parseFloat(tceaSelect.value);
       if (tceaSelect.value === "manual") {
@@ -301,25 +300,26 @@
       } else {
         tceaAplicada = tceaAplicada; // ya viene en decimal
       }
-
-
-
-
       const body = {
         dni: document.getElementById("dni").value.trim(),
+        email: document.getElementById("email").value.trim(),
         nombre: document.getElementById("nombre").value.trim(),
         nombres: document.getElementById("nombres").value.trim(),
         apellido_paterno: document.getElementById("apellidoP").value.trim(),
         apellido_materno: document.getElementById("apellidoM").value.trim(),
         departamento: document.getElementById("departamento").value.trim(),
         direccion: document.getElementById("direccionCompleta").value.trim(),
-        email: document.getElementById("email").value.trim(),
         monto: parseFloat(document.getElementById("dinero").value),
+        plazo: parseInt(document.getElementById("plazo").value),
+        tipo_prestamo: document.getElementById("tipoPrestamo").value,
+        tcea_aplicada: (tceaSelect.value === "manual"
+          ? parseFloat(tceaManual.value) / 100
+          : parseFloat(tceaSelect.value)),
         fecha_inicio: document.getElementById("fechaInicio").value,
-        fecha_fin: document.getElementById("fechaFin").value,
-        tipo_prestamo: tipoPrestamoSelect.value,
-        tcea_aplicada: tceaAplicada
+        fecha_fin: document.getElementById("fechaFin").value
       };
+
+
 
       try {
         const res = await fetch("/api/clientes", {

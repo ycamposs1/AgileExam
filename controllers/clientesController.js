@@ -186,8 +186,24 @@ async function crearPrestamo(idCliente) {
         return res.status(500).json({ success: false, message: "Error al actualizar fondo." });
       }
 
+      // VALIDAR LUEGO 
+      
+      // 🧮 Validar valores numéricos
+      const plazoNum = parseInt(plazo);
+      const tceaNum = parseFloat(tcea_aplicada);
+
+      if (isNaN(plazoNum) || plazoNum <= 0) {
+        console.error("❌ Plazo inválido o no definido:", plazo);
+        return res.status(400).json({ success: false, message: "El plazo del préstamo no es válido." });
+      }
+
       // ✅ Generar cronograma con TCEA incluida
-      const pagos = generarCronograma(fecha_inicio, monto, plazo, tcea_aplicada);
+      const pagos = generarCronograma(fecha_inicio, monto, plazoNum, tceaNum);
+      if (!pagos || pagos.length === 0) {
+        console.error("❌ No se generaron pagos correctamente.");
+        return res.status(500).json({ success: false, message: "Error generando cronograma de pagos." });
+      }
+
       console.table(pagos);
 
       // ✅ Generar PDF del cronograma
@@ -197,13 +213,23 @@ async function crearPrestamo(idCliente) {
         email,
         tipo_prestamo,
         monto,
-        plazo,
-        tcea_aplicada,
+        plazo: plazoNum,
+        tcea_aplicada: tceaNum,
         pagos
       }, pdfPath);
 
       // ✅ Enviar correo al cliente
-      await enviarCorreoConPDF(email, nombre, pdfPath);
+      await enviarCorreoConPDF(email, nombre, pdfPath, {
+        nombre,
+        email,
+        tipo_prestamo,
+        monto,
+        plazo: plazoNum,
+        tcea_aplicada: tceaNum,
+        pagos
+      });
+
+
 
       // ✅ Respuesta al frontend
       res.json({
@@ -285,34 +311,34 @@ exports.eliminarCliente = (req, res) => {
 // =======================================================
 async function generarPDFCronograma(datos, rutaArchivo) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument();
+    const doc = new PDFDocument({ margin: 50 });
     const stream = fs.createWriteStream(rutaArchivo);
     doc.pipe(stream);
 
-    doc.fontSize(18).text("📄 Cronograma de Pagos", { align: "center" });
-    doc.moveDown();
+    doc.fontSize(18).text("Cronograma de Pagos", { align: "center" });
+    doc.moveDown(1);
 
-    doc.fontSize(12).text(`Cliente: ${datos.nombre}`);
-    doc.text(`Correo: ${datos.email}`);
-    doc.text(`Tipo de préstamo: ${datos.tipo_prestamo}`);
-    doc.text(`Monto total: S/ ${datos.monto.toFixed(2)}`);
-    doc.text(`Plazo: ${datos.plazo} meses`);
-    doc.text(`TCEA aplicada: ${(datos.tcea_aplicada * 100).toFixed(2)}%`);
-    doc.moveDown();
+    doc.fontSize(12)
+      .text(`Cliente: ${datos.nombre}`)
+      .text(`Correo: ${datos.email}`)
+      .text(`Tipo de préstamo: ${datos.tipo_prestamo}`)
+      .text(`Monto total: S/ ${datos.monto.toFixed(2)}`)
+      .text(`Plazo: ${datos.plazo} meses`)
+      .text(`TCEA aplicada: ${(datos.tcea_aplicada * 100).toFixed(2)}%`)
+      .moveDown(1);
 
-    doc.fontSize(13).text("Detalle de cuotas:");
+    doc.fontSize(14).text("Detalle de Cuotas:", { underline: true });
     doc.moveDown(0.5);
 
-    // Encabezado tabla
-    doc.fontSize(11);
-    doc.text("N° Cuota", 50);
+    // Cabecera de tabla
+    doc.fontSize(12).text("N° Cuota", 60);
     doc.text("Fecha de pago", 150);
     doc.text("Monto (S/)", 300);
-    doc.moveDown(0.5);
+    doc.moveDown(0.3);
 
-    // Detalle de pagos
+    doc.fontSize(11);
     datos.pagos.forEach(p => {
-      doc.text(p.nro_cuota.toString(), 50);
+      doc.text(p.nro_cuota.toString(), 60);
       doc.text(p.fecha_pago, 150);
       doc.text(p.monto.toFixed(2), 300);
     });
@@ -323,21 +349,66 @@ async function generarPDFCronograma(datos, rutaArchivo) {
   });
 }
 
+
 // =======================================================
 // 🔹 FUNCIÓN PARA ENVIAR CORREO CON PDF ADJUNTO
 // =======================================================
-async function enviarCorreoConPDF(destinatario, nombreCliente, pdfPath) {
+async function enviarCorreoConPDF(destinatario, nombreCliente, pdfPath, datos) {
+  // Creamos una mini tabla HTML de las primeras 3 cuotas
+  const cuotasPreview = datos.pagos
+    .slice(0, 3)
+    .map(p => `
+      <tr>
+        <td style="padding:6px;border:1px solid #ccc;text-align:center;">${p.nro_cuota}</td>
+        <td style="padding:6px;border:1px solid #ccc;text-align:center;">${p.fecha_pago}</td>
+        <td style="padding:6px;border:1px solid #ccc;text-align:center;">S/ ${p.monto.toFixed(2)}</td>
+      </tr>
+    `).join("");
+
   const mailOptions = {
     from: `"Banco Brar" <${process.env.SMTP_FROM}>`,
     to: destinatario,
-    subject: "Cronograma de pagos de tu préstamo",
+    subject: "Tu cronograma de pagos - Banco Brar",
     html: `
-      <p>Estimado/a <strong>${nombreCliente}</strong>,</p>
-      <p>Adjunto encontrarás tu cronograma de pagos correspondiente a tu préstamo registrado en nuestro sistema.</p>
-      <p>Por favor, revisa las fechas de pago y los montos correspondientes.</p>
-      <p>Gracias por confiar en nosotros.</p>
-      <br>
-      <p><strong>Atentamente,</strong><br>Equipo de FinanzasApp</p>
+      <div style="font-family:Arial,sans-serif;">
+        <p>Estimado/a <strong>${nombreCliente}</strong>,</p>
+        <p>Adjunto encontrarás tu <strong>cronograma completo de pagos</strong> correspondiente a tu préstamo registrado en nuestro sistema.</p>
+
+        <h3>Resumen del préstamo:</h3>
+        <ul>
+          <li><b>Tipo de préstamo:</b> ${datos.tipo_prestamo}</li>
+          <li><b>Monto total:</b> S/ ${datos.monto.toFixed(2)}</li>
+          <li><b>Plazo:</b> ${datos.plazo} meses</li>
+          <li><b>TCEA aplicada:</b> ${(datos.tcea_aplicada * 100).toFixed(2)}%</li>
+        </ul>
+
+        <h3>Primeras cuotas:</h3>
+        <table style="border-collapse:collapse;width:100%;border:1px solid #ccc;">
+          <thead>
+            <tr style="background:#0c2340;color:white;">
+              <th style="padding:6px;border:1px solid #ccc;">N° Cuota</th>
+              <th style="padding:6px;border:1px solid #ccc;">Fecha de pago</th>
+              <th style="padding:6px;border:1px solid #ccc;">Monto (S/)</th>
+            </tr>
+          </thead>
+          <tbody>${cuotasPreview}</tbody>
+        </table>
+
+        <p>
+          El pago debe realizarse 
+          <b>cada mes en la misma fecha de inicio</b> 
+          ${
+            datos.pagos && datos.pagos.length > 0
+              ? `(${datos.pagos[0].fecha_pago.split("-")[2]} de cada mes)`
+              : "(según el cronograma adjunto)"
+          }.
+        </p>
+
+        <p>Para más detalles, revisa el PDF adjunto.</p>
+
+        <br>
+        <p><strong>Atentamente,</strong><br>Equipo de <b>Banco Brar</b></p>
+      </div>
     `,
     attachments: [
       {
@@ -354,4 +425,5 @@ async function enviarCorreoConPDF(destinatario, nombreCliente, pdfPath) {
     console.error("❌ Error enviando correo:", err);
   }
 }
+
 
