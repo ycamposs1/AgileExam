@@ -152,7 +152,7 @@
   <div class="navbar">
     <h2>Banco BRAR</h2>
     <div class="right">
-      <span id="bienvenida">Bienvenido, usuario</span>
+      <span id="bienvenida">Bienvenido: usuario</span>
       <span id="fondos">Cantidad de dinero a prestar: S/ 0.00</span>
       <button onclick="cerrarSesion()">Cerrar Sesión</button>
     </div>
@@ -161,7 +161,7 @@
   <!-- Panel inferior -->
   <div class="main">
     <div class="sidebar" id="sidebar">
-      <img src="assets/logo.png" alt="Logo Banco" id="logo">
+      <img src="../views/assets/logo2.png" alt="Logo Banco" id="logo">
       <a href="/clientes" target="contentFrame" data-section="clientes">Clientes Naturales</a>
       <a href="/pep" target="contentFrame" data-section="pep">PEP</a>
       <a href="/actividad" target="contentFrame" data-section="actividad">Registro de Actividad</a>
@@ -225,7 +225,7 @@
       try {
         const res = await fetch('/api/info');
         const data = await res.json();
-        document.getElementById('bienvenida').textContent = `Bienvenido, ${data.usuario}`;
+        document.getElementById('bienvenida').textContent = `Bienvenido: ${data.usuario}`;
         document.getElementById('fondos').textContent = `Cantidad de dinero a prestar: S/ ${data.monto.toFixed(2)}`;
       } catch (e) {
         console.error("Error cargando datos", e);
@@ -240,7 +240,7 @@
     // Escuchar cuando se actualiza el perfil desde el iframe
     window.addEventListener('message', (event) => {
     if (event.data.type === 'perfilActualizado') {
-        document.getElementById('bienvenida').textContent = `Bienvenido, ${event.data.username}`;
+        document.getElementById('bienvenida').textContent = `Bienvenido: ${event.data.username}`;
     }
     });
 

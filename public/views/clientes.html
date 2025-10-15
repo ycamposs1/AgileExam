@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Clientes Naturales</title>
+  <link rel="stylesheet" href="/css/clientes.css">
+</head>
+<body>
+  <h2>Clientes Naturales</h2>
+
+  <div class="tabs">
+    <div class="tab active" id="tab-lista">📋 Lista de usuarios</div>
+    <div class="tab" id="tab-crear">➕ Crear cliente</div>
+  </div>
+
+  <!-- LISTA -->
+  <div class="section active" id="lista-section">
+    <div class="toolbar">
+      <button id="btnRecargar">🔄 Recargar</button>
+      <span id="msgLista" class="loading">Cargando lista de clientes...</span>
+    </div>
+    <table id="tabla-clientes">
+      <thead>
+        <tr>
+          <th>DNI</th>
+          <th>Nombre</th>
+          <th>Monto (S/)</th>
+          <th>Inicio</th>
+          <th>Fin</th>
+          <th>Operaciones</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- FORMULARIO -->
+  <div class="section" id="crear-section">
+    <form id="crearForm">
+      <label for="dni">DNI</label>
+      <div class="input-group">
+        <input type="text" id="dni" maxlength="8" required placeholder="Ej: 12345678">
+        <button type="button" id="buscarDNI">🔍</button>
+      </div>
+
+      <label for="nombre">Nombre completo</label>
+      <input type="text" id="nombre" readonly class="readonly">
+
+      <label for="nombres">Nombres</label>
+      <input type="text" id="nombres" readonly class="readonly">
+
+      <label for="apellidoP">Apellido paterno</label>
+      <input type="text" id="apellidoP" readonly class="readonly">
+
+      <label for="apellidoM">Apellido materno</label>
+      <input type="text" id="apellidoM" readonly class="readonly">
+
+      <label for="departamento">Departamento</label>
+      <input type="text" id="departamento" readonly class="readonly">
+
+      <label for="direccionCompleta">Dirección completa</label>
+      <input type="text" id="direccionCompleta" readonly class="readonly">
+
+      <label for="email">Correo electrónico</label>
+      <input type="email" id="email" required placeholder="Ej: cliente@correo.com">
+
+      <label for="dinero">Monto del préstamo (S/)</label>
+      <input type="number" id="dinero" min="0" step="0.01" required>
+
+      <label for="tipoPrestamo">Tipo de préstamo</label>
+      <select id="tipoPrestamo" required>
+        <option value="">Seleccione...</option>
+        <option value="personal">Personal</option>
+        <option value="vehicular">Vehicular</option>
+        <option value="hipotecario">Hipotecario</option>
+        <option value="educativo">Educativo</option>
+      </select>
+
+      <label for="tceaSelect">TCEA (%)</label>
+      <select id="tceaSelect" required>
+        <option value="">Seleccione tipo de préstamo primero</option>
+      </select>
+
+      <div id="tceaManualContainer" style="display:none;">
+        <label for="tceaManual">TCEA personalizada (%)</label>
+        <input type="number" id="tceaManual" min="0" max="200" step="0.01" placeholder="Ej: 18.5">
+      </div>
+
+      <label for="fechaInicio">Fecha de inicio</label>
+      <input type="date" id="fechaInicio" readonly>
+
+      <label for="plazo">Plazo (pago)</label>
+      <select id="plazo" required>
+        <option value="">Seleccione...</option>
+        <option value="3">3 meses</option>
+        <option value="6">6 meses</option>
+        <option value="9">9 meses</option>
+        <option value="12">12 meses</option>
+        <option value="24">24 meses</option>
+      </select>
+
+      <label for="fechaFin">Fecha de fin</label>
+      <input type="date" id="fechaFin" readonly>
+
+      <button type="submit">💾 Guardar Cliente</button>
+      <p id="msgForm"></p>
+    </form>
+  </div>
+
+  <!-- MODAL -->
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <h3>Detalles del Cliente</h3>
+      <div id="detalleCliente"></div>
+      <button id="btnEliminar" class="btn-danger">🗑️ Eliminar</button>
+      <button onclick="cerrarModal()">Cerrar</button>
+    </div>
+  </div>
+
+  <script src="/js/utils.js"></script>
+  <script src="/js/clientes.js"></script>
+</body>
+</html>
+<script src="/js/utils.js" defer></script>
+<script src="/js/clientes.js" defer></script>
+

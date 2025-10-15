@@ -9,7 +9,7 @@ const router = express.Router();
 // 🔹 Página de login
 // ==============================
 router.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'views', 'login.html'));
+  res.sendFile(path.join(__dirname, '..', 'public', 'views', 'login.html'));
 });
 
 // ==============================
