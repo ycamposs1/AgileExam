@@ -324,6 +324,69 @@ exports.eliminarCliente = (req, res) => {
     });
   });
 };
+
+// =======================================================
+// 🔹 CRONOGRAMA DE PAGOS (por cliente)
+// =======================================================
+exports.obtenerCronograma = (req, res) => {
+  const { dni } = req.params;
+
+  const query = `
+    SELECT p.monto, p.plazo, p.tcea_aplicada, p.fecha_inicio
+    FROM prestamos p
+    INNER JOIN clientes c ON p.id_cliente = c.id
+    WHERE c.dni = ?
+  `;
+
+  db.get(query, [dni], (err, prestamo) => {
+    if (err) {
+      console.error("Error al obtener cronograma:", err);
+      return res.status(500).json({ success: false, message: "Error al obtener cronograma" });
+    }
+
+    if (!prestamo) {
+      return res.json({ success: false, message: "No se encontró préstamo para este cliente." });
+    }
+
+    const { monto, plazo, tcea_aplicada, fecha_inicio } = prestamo;
+    const i = Math.pow(1 + parseFloat(tcea_aplicada), 1 / 12) - 1;
+    const cuota = monto * (i / (1 - Math.pow(1 + i, -plazo)));
+
+    const cronograma = [];
+    let saldo = monto;
+    let fecha = new Date(fecha_inicio);
+
+    for (let k = 1; k <= plazo; k++) {
+      const interes = saldo * i;
+      const amortizacion = cuota - interes;
+      saldo -= amortizacion;
+
+      // avanzar un mes
+      const fechaPago = new Date(fecha);
+      fechaPago.setMonth(fechaPago.getMonth() + 1);
+
+      cronograma.push({
+        nro: k,
+        fecha_pago: fechaPago.toISOString().split('T')[0],
+        cuota: cuota.toFixed(2),
+        interes: interes.toFixed(2),
+        amortizacion: amortizacion.toFixed(2),
+        saldo: saldo > 0 ? saldo.toFixed(2) : '0.00'
+      });
+
+      fecha = fechaPago;
+    }
+
+    res.json({
+      success: true,
+      cuota: cuota.toFixed(2),
+      total_pagar: (cuota * plazo).toFixed(2),
+      cronograma
+    });
+  });
+};
+
+
 // =======================================================
 // 🔹 FUNCIÓN PARA GENERAR PDF DEL CRONOGRAMA
 // =======================================================

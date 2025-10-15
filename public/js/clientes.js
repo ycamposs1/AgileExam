@@ -100,6 +100,7 @@ async function cargarClientes() {
         <td>${c.fecha_fin || ''}</td>
         <td class="actions">
           <button onclick="verDetalle('${c.dni}')">👁️ Ver</button>
+          <button onclick="verCronograma('${c.dni}')">📅 Cronograma</button>
         </td>
       `;
       tbody.appendChild(tr);
@@ -177,6 +178,62 @@ async function guardarCliente(e) {
     mostrarMensaje(msgForm, "❌ Error al guardar cliente.", "error");
   }
 }
+
+// ========= CRONOGRAMA =========
+async function verCronograma(dni) {
+  const modal = document.getElementById("modalCronograma");
+  const contenido = document.getElementById("cronogramaContenido");
+
+  contenido.innerHTML = "<p class='loading'>Cargando cronograma...</p>";
+  modal.style.display = "flex";
+
+  try {
+    const res = await fetch(`/api/clientes/${dni}/cronograma`);
+    const data = await res.json();
+
+    if (!data.success) {
+      contenido.innerHTML = `<p class='error'>${data.message}</p>`;
+      return;
+    }
+
+    let html = `
+      <p><strong>Cuota mensual:</strong> S/ ${data.cuota}</p>
+      <p><strong>Total a pagar:</strong> S/ ${data.total_pagar}</p>
+      <table style="width:100%;border-collapse:collapse;margin-top:10px;">
+        <thead>
+          <tr style="background:#0c2340;color:white;">
+            <th>N°</th><th>Fecha Pago</th><th>Cuota (S/)</th><th>Interés</th><th>Amortización</th><th>Saldo</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    data.cronograma.forEach(cuota => {
+      html += `
+        <tr>
+          <td>${cuota.nro}</td>
+          <td>${cuota.fecha_pago}</td>
+          <td>${cuota.cuota}</td>
+          <td>${cuota.interes}</td>
+          <td>${cuota.amortizacion}</td>
+          <td>${cuota.saldo}</td>
+        </tr>
+      `;
+    });
+
+    html += "</tbody></table>";
+
+    contenido.innerHTML = html;
+  } catch (err) {
+    contenido.innerHTML = "<p class='error'>❌ Error al obtener cronograma.</p>";
+    console.error(err);
+  }
+}
+
+function cerrarModalCronograma() {
+  document.getElementById("modalCronograma").style.display = "none";
+}
+
 
 window.verDetalle = async dni => {
   const modal = document.getElementById("modal");

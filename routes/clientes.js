@@ -7,6 +7,9 @@ router.get('/clientes', clientesController.obtenerClientes);
 router.post('/clientes', clientesController.crearCliente);
 // Nueva ruta para obtener detalle del cliente por DNI
 router.get('/clientes/:dni', clientesController.obtenerClientePorDni);
+//cronograma de cliente
+router.get('/clientes/:dni/cronograma', clientesController.obtenerCronograma);
+
 
 
 // 🧾 Nueva ruta para eliminar cliente por DNI
