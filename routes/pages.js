@@ -38,4 +38,3 @@ router.get('/perfil', authMiddleware, (req, res) => {
 });
 
 module.exports = router;
-

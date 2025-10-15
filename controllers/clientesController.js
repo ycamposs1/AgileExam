@@ -1,11 +1,14 @@
 const db = require('../db');
 
-// listar a los clientes con su respectivo prestamo
+// =======================================================
+// 🔹 LISTAR CLIENTES (con nombre, email y préstamo asociado)
+// =======================================================
 exports.obtenerClientes = (req, res) => {
   const query = `
     SELECT 
       c.dni,
       c.nombre,
+      c.email,
       IFNULL(p.monto, 0) AS monto,
       IFNULL(p.fecha_inicio, '') AS fecha_inicio,
       IFNULL(p.fecha_fin, '') AS fecha_fin
@@ -24,10 +27,44 @@ exports.obtenerClientes = (req, res) => {
   });
 };
 
-// 🔹 Crear cliente y préstamo
+// =======================================================
+// 🔹 OBTENER DETALLE DE CLIENTE POR DNI
+// =======================================================
+exports.obtenerClientePorDni = (req, res) => {
+  const { dni } = req.params;
+
+  const query = `
+    SELECT 
+      c.*, 
+      IFNULL(p.monto, 0) AS monto, 
+      IFNULL(p.fecha_inicio, '') AS fecha_inicio, 
+      IFNULL(p.fecha_fin, '') AS fecha_fin
+    FROM clientes c
+    LEFT JOIN prestamos p ON c.id = p.id_cliente
+    WHERE c.dni = ?
+  `;
+
+  db.get(query, [dni], (err, row) => {
+    if (err) {
+      console.error("Error obteniendo detalle:", err);
+      return res.status(500).json({ success: false, message: "Error al obtener detalle." });
+    }
+
+    if (!row) {
+      return res.status(404).json({ success: false, message: "Cliente no encontrado." });
+    }
+
+    res.json({ success: true, cliente: row });
+  });
+};
+
+// =======================================================
+// 🔹 CREAR CLIENTE Y PRÉSTAMO
+// =======================================================
 exports.crearCliente = (req, res) => {
   const {
     dni,
+    email,
     nombre,
     nombres,
     apellido_paterno,
@@ -35,12 +72,13 @@ exports.crearCliente = (req, res) => {
     departamento,
     direccion,
     monto,
+    plazo,
     fecha_inicio,
     fecha_fin
   } = req.body;
 
-  // Validación básica
-  if (!dni || !nombre || !monto || !fecha_inicio || !fecha_fin) {
+  // Validación de campos requeridos
+  if (!dni || !nombre || !email || !monto || !fecha_inicio || !fecha_fin) {
     return res.status(400).json({
       success: false,
       message: "Faltan campos obligatorios."
@@ -75,65 +113,89 @@ exports.crearCliente = (req, res) => {
       }
 
       if (clienteExistente) {
-        // Cliente existe → crear préstamo directamente
         crearPrestamo(clienteExistente.id);
       } else {
-        // Crear cliente nuevo
+        // Crear nuevo cliente con email
         const insertarCliente = `
-          INSERT INTO clientes (dni, nombre, nombres, apellido_paterno, apellido_materno, departamento, direccion)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO clientes (dni, nombre, nombres, apellido_paterno, apellido_materno, departamento, direccion, email)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `;
         db.run(
           insertarCliente,
-          [dni, nombre, nombres, apellido_paterno, apellido_materno, departamento, direccion],
+          [dni, nombre, nombres, apellido_paterno, apellido_materno, departamento, direccion, email],
           function (err) {
             if (err) {
-              console.error("Error cliente:", err);
+              console.error("Error al insertar cliente:", err);
               return res.status(500).json({
                 success: false,
                 message: "Error al registrar cliente. Es posible que el DNI ya exista."
               });
             }
-            crearPrestamo(this.lastID); // ✅ Usamos el ID recién insertado
+            crearPrestamo(this.lastID);
           }
         );
       }
     });
   });
 
-  // ---------------------
-  // 🧩 Función auxiliar para crear préstamo y actualizar fondos
-  // ---------------------
+  // ------------------------------
+  // 🧩 Función auxiliar: Crear préstamo y cronograma
+  // ------------------------------
   function crearPrestamo(idCliente) {
     const insertarPrestamo = `
-      INSERT INTO prestamos (id_cliente, monto, fecha_inicio, fecha_fin)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO prestamos (id_cliente, monto, fecha_inicio, fecha_fin, plazo)
+      VALUES (?, ?, ?, ?, ?)
     `;
-    db.run(insertarPrestamo, [idCliente, monto, fecha_inicio, fecha_fin], function (err) {
+    db.run(insertarPrestamo, [idCliente, monto, fecha_inicio, fecha_fin, plazo], function (err) {
       if (err) {
         console.error("Error préstamo:", err);
         return res.status(500).json({ success: false, message: "Error al registrar préstamo." });
       }
 
       // Actualizar fondo total
-      db.run("UPDATE fondos SET monto_total = monto_total - ?", [monto], function (err2) {
+      db.run("UPDATE fondos SET monto_total = monto_total - ?", [monto], (err2) => {
         if (err2) {
           console.error("Error actualizando fondos:", err2);
           return res.status(500).json({ success: false, message: "Error al actualizar fondo." });
         }
 
+        // ✅ Generar cronograma simple
+        const pagos = generarCronograma(fecha_inicio, monto, plazo);
+        console.table(pagos);
+
         res.json({
           success: true,
-          message: "✅ Cliente registrado y préstamo asignado correctamente."
+          message: "✅ Cliente registrado y préstamo asignado correctamente.",
+          cronograma: pagos
         });
       });
     });
   }
+
+  // ------------------------------
+  // 🧮 Función auxiliar: Cronograma de pagos mensuales
+  // ------------------------------
+  function generarCronograma(fechaInicio, montoTotal, meses) {
+    const pagos = [];
+    const montoMensual = (montoTotal / meses).toFixed(2);
+    let fecha = new Date(fechaInicio);
+
+    for (let i = 1; i <= meses; i++) {
+      fecha.setMonth(fecha.getMonth() + 1);
+      pagos.push({
+        nro_cuota: i,
+        fecha_pago: fecha.toISOString().split('T')[0],
+        monto: parseFloat(montoMensual)
+      });
+    }
+
+    return pagos;
+  }
 };
 
-
-
-// 🔹 Eliminar cliente (y préstamo)
+// =======================================================
+// 🔹 ELIMINAR CLIENTE Y SU PRÉSTAMO
+// =======================================================
 exports.eliminarCliente = (req, res) => {
   const { dni } = req.params;
 

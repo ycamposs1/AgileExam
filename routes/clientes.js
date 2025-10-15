@@ -5,6 +5,9 @@ const clientesController = require('../controllers/clientesController'); // 👈
 // Rutas principales de clientes
 router.get('/clientes', clientesController.obtenerClientes);
 router.post('/clientes', clientesController.crearCliente);
+// Nueva ruta para obtener detalle del cliente por DNI
+router.get('/clientes/:dni', clientesController.obtenerClientePorDni);
+
 
 // 🧾 Nueva ruta para eliminar cliente por DNI
 router.delete('/clientes/:dni', clientesController.eliminarCliente);
