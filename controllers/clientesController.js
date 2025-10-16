@@ -3,12 +3,16 @@ const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 require('dotenv').config();
-
+const sgMail = require('@sendgrid/mail');
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 
 // =======================================================
 // 🔹 CONFIGURACIÓN DE TRANSPORTADOR DE CORREO
 // =======================================================
+console.log("🔑 SENDGRID_API_KEY (inicio):", process.env.SENDGRID_API_KEY?.slice(0, 10) || "No definida");
+
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: process.env.SMTP_PORT,
@@ -531,76 +535,61 @@ async function generarPDFCronograma(datos, rutaArchivo) {
 // 🔹 FUNCIÓN PARA ENVIAR CORREO CON PDF ADJUNTO
 // =======================================================
 async function enviarCorreoConPDF(destinatario, nombreCliente, pdfPath, datos) {
-  // Creamos una mini tabla HTML de las primeras 3 cuotas
-  const cuotasPreview = datos.pagos
-    .slice(0, 3)
-    .map(p => `
-      <tr>
-        <td style="padding:6px;border:1px solid #ccc;text-align:center;">${p.nro_cuota}</td>
-        <td style="padding:6px;border:1px solid #ccc;text-align:center;">${p.fecha_pago}</td>
-        <td style="padding:6px;border:1px solid #ccc;text-align:center;">S/ ${p.monto.toFixed(2)}</td>
-      </tr>
-    `).join("");
+  const cuotasPreview = (datos.pagos || []).slice(0, 3).map(p => `
+    <tr>
+      <td style="padding:6px;border:1px solid #ccc;text-align:center;">${p.nro_cuota}</td>
+      <td style="padding:6px;border:1px solid #ccc;text-align:center;">${p.fecha_pago}</td>
+      <td style="padding:6px;border:1px solid #ccc;text-align:center;">S/ ${p.monto.toFixed(2)}</td>
+    </tr>
+  `).join("");
 
-  const mailOptions = {
-    from: `"Banco Brar" <${process.env.SMTP_FROM}>`,
+  const html = `
+    <div style="font-family:Arial,sans-serif;">
+      <p>Estimado/a <strong>${nombreCliente}</strong>,</p>
+      <p>Adjunto encontrarás tu <strong>cronograma completo de pagos</strong>.</p>
+      <h3>Resumen del préstamo:</h3>
+      <ul>
+        <li><b>Tipo de préstamo:</b> ${datos.tipo_prestamo}</li>
+        <li><b>Monto total:</b> S/ ${datos.monto.toFixed(2)}</li>
+        <li><b>Plazo:</b> ${datos.plazo} meses</li>
+        <li><b>TCEA aplicada:</b> ${(datos.tcea_aplicada * 100).toFixed(2)}%</li>
+      </ul>
+      <h3>Primeras cuotas:</h3>
+      <table style="border-collapse:collapse;width:100%;border:1px solid #ccc;">
+        <thead>
+          <tr style="background:#0c2340;color:white;">
+            <th style="padding:6px;border:1px solid #ccc;">N° Cuota</th>
+            <th style="padding:6px;border:1px solid #ccc;">Fecha de pago</th>
+            <th style="padding:6px;border:1px solid #ccc;">Monto (S/)</th>
+          </tr>
+        </thead>
+        <tbody>${cuotasPreview}</tbody>
+      </table>
+      <p>Para más detalles, revisa el PDF adjunto.</p>
+      <br>
+      <p><strong>Atentamente,</strong><br>Equipo de <b>Banco Brar</b></p>
+    </div>
+  `;
+
+  // Adjuntar PDF como base64
+  const fileBuffer = fs.readFileSync(pdfPath);
+  const attachment = fileBuffer.toString('base64');
+
+  const msg = {
     to: destinatario,
-    subject: "Tu cronograma de pagos - Banco Brar",
-    html: `
-      <div style="font-family:Arial,sans-serif;">
-        <p>Estimado/a <strong>${nombreCliente}</strong>,</p>
-        <p>Adjunto encontrarás tu <strong>cronograma completo de pagos</strong> correspondiente a tu préstamo registrado en nuestro sistema.</p>
-
-        <h3>Resumen del préstamo:</h3>
-        <ul>
-          <li><b>Tipo de préstamo:</b> ${datos.tipo_prestamo}</li>
-          <li><b>Monto total:</b> S/ ${datos.monto.toFixed(2)}</li>
-          <li><b>Plazo:</b> ${datos.plazo} meses</li>
-          <li><b>TCEA aplicada:</b> ${(datos.tcea_aplicada * 100).toFixed(2)}%</li>
-        </ul>
-
-        <h3>Primeras cuotas:</h3>
-        <table style="border-collapse:collapse;width:100%;border:1px solid #ccc;">
-          <thead>
-            <tr style="background:#0c2340;color:white;">
-              <th style="padding:6px;border:1px solid #ccc;">N° Cuota</th>
-              <th style="padding:6px;border:1px solid #ccc;">Fecha de pago</th>
-              <th style="padding:6px;border:1px solid #ccc;">Monto (S/)</th>
-            </tr>
-          </thead>
-          <tbody>${cuotasPreview}</tbody>
-        </table>
-
-        <p>
-          El pago debe realizarse 
-          <b>cada mes en la misma fecha de inicio</b> 
-          ${
-            datos.pagos && datos.pagos.length > 0
-              ? `(${datos.pagos[0].fecha_pago.split("-")[2]} de cada mes)`
-              : "(según el cronograma adjunto)"
-          }.
-        </p>
-
-        <p>Para más detalles, revisa el PDF adjunto.</p>
-
-        <br>
-        <p><strong>Atentamente,</strong><br>Equipo de <b>Banco Brar</b></p>
-      </div>
-    `,
-    attachments: [
-      {
-        filename: 'Cronograma_Pagos.pdf',
-        path: pdfPath
-      }
-    ]
+    from: { email: process.env.SMTP_FROM, name: 'Banco Brar' },
+    subject: 'Tu cronograma de pagos - Banco Brar',
+    html,
+    attachments: [{
+      content: attachment,
+      filename: 'Cronograma_Pagos.pdf',
+      type: 'application/pdf',
+      disposition: 'attachment'
+    }]
   };
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`📤 Correo enviado a ${destinatario}`);
-  } catch (err) {
-    console.error("❌ Error enviando correo:", err);
-  }
+  await sgMail.send(msg);
+  console.log(`📤 Correo enviado a ${destinatario} vía Web API`);
 }
 
 
