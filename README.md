@@ -87,34 +87,35 @@ Además, se requiere que el sistema **envíe automáticamente un correo electró
 
 📦 agileParcialExam/
 ├── 📁 controllers/
-│ ├── authController.js
-│ ├── clientesController.js
-│ └── reniecController.js
+│   ├── adminController.js
+│   ├── authController.js
+│   ├── clientesController.js
+│   └── reniecController.js
 │
 ├── 📁 routes/
-│ ├── auth.js
-│ ├── clientes.js
-│ ├── pages.js
-│ └── reniec.js
+│   ├── admin.js
+│   ├── auth.js
+│   ├── clientes.js
+│   ├── pages.js
+│   └── reniec.js
 │
 ├── 📁 public/
-│ ├── 📁 css/
-│ │ └── clientes.css
-│ ├── 📁 js/
-│ │ ├── clientes.js
-│ │ └── utils.js
-│ └── 📁 views/
-│ ├── login.html
-│ ├── admin.html
-│ ├── clientes.html
-│ ├── pep.html
-│ ├── actividad.html
-│ └── perfil.html
+│   ├── 📁 css/
+│   │   └── clientes.css
+│   ├── 📁 js/
+│   │   ├── clientes.js
+│   │   └── utils.js
+│   └── 📁 views/
+│       ├── login.html
+│       ├── admin.html
+│       ├── clientes.html
+│       ├── pep.html
+│       ├── actividad.html
+│       └── perfil.html
 │
 ├── 📄 db.js
 ├── 📄 server.js
 ├── 📄 package.json
 ├── 📄 .env
 └── 📄 README.md
-
 
