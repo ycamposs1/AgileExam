@@ -1,0 +1,13 @@
+{
+    "login_title": "Bienvenido a Banco BRAR",
+    "login_subtitle": "Inicia sesión para continuar con tu panel administrativo",
+    "login_username": "Usuario",
+    "login_username_placeholder": "Ingresa tu usuario",
+    "login_password": "Contraseña",
+    "login_password_placeholder": "Ingresa tu contraseña",
+    "login_button": "Iniciar Sesión",
+    "login_forgot": "¿Olvidaste tu contraseña?",
+    "footer_rights": "©2025 Banco BRAR. Todos los derechos reservados.",
+    "error_server": "Error al conectar con el servidor.",
+    "error_credentials": "Credenciales incorrectas"
+}

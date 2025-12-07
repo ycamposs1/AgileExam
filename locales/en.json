@@ -1,0 +1,13 @@
+{
+    "login_title": "Welcome to Banco BRAR",
+    "login_subtitle": "Sign in to continue to your admin panel",
+    "login_username": "Username",
+    "login_username_placeholder": "Enter your username",
+    "login_password": "Password",
+    "login_password_placeholder": "Enter your password",
+    "login_button": "Sign In",
+    "login_forgot": "Forgot your password?",
+    "footer_rights": "©2025 Banco BRAR. All rights reserved.",
+    "error_server": "Error connecting to server.",
+    "error_credentials": "Incorrect credentials"
+}
