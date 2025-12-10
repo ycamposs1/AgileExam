@@ -3,12 +3,19 @@ document.addEventListener("DOMContentLoaded", () => {
   const fechaInicioInput = document.getElementById('fechaInicio');
   const hoyISO = new Date().toISOString().split('T')[0];
   fechaInicioInput.value = hoyISO;
+  fechaInicioInput.min = hoyISO; // Restrict to today onwards
 
-  document.getElementById("plazo").addEventListener("change", () => {
-    const meses = parseInt(plazo.value);
-    if (!meses) return;
-    fechaFin.value = calcularFechaFin(hoyISO, meses);
-  });
+  // Recalcular fecha fin si cambia inicio o plazo
+  function actualizarFechaFin() {
+    const inicio = fechaInicioInput.value;
+    const meses = parseInt(document.getElementById("plazo").value);
+    if (inicio && meses) {
+      document.getElementById("fechaFin").value = calcularFechaFin(inicio, meses);
+    }
+  }
+
+  fechaInicioInput.addEventListener("change", actualizarFechaFin);
+  document.getElementById("plazo").addEventListener("input", actualizarFechaFin);
 
   // PESTAÑAS
   const tabLista = document.getElementById('tab-lista');
@@ -195,6 +202,7 @@ async function guardarCliente(e) {
     departamento: document.getElementById("departamento").value,
     direccion: document.getElementById("direccionCompleta").value.trim(),
     monto: parseFloat(document.getElementById("dinero").value),
+    monto: parseFloat(document.getElementById("dinero").value),
     plazo: parseInt(document.getElementById("plazo").value),
     tipo_prestamo: "Personal",
     tasas_detalle: JSON.stringify(bodyObj.tasas_detalle), // Send as JSON string
@@ -295,6 +303,20 @@ window.verDetalle = async dni => {
       const c = data.cliente;
       const i = Math.pow(1 + parseFloat(c.tcea_aplicada), 1 / 12) - 1;
       const cuotaCal = c.monto * (i / (1 - Math.pow(1 + i, -c.plazo)));
+      const totalOriginalConInteres = cuotaCal * c.plazo;
+
+      // Calculate remaining debt based on principal payments
+      // Assuming backend reduces saldo_pendiente by the payment amount
+      const saldoPrincipalActual = c.saldo_pendiente !== null ? parseFloat(c.saldo_pendiente) : parseFloat(c.monto);
+      const totalPagadoCapital = parseFloat(c.monto) - saldoPrincipalActual;
+
+      const fondoIndividual = c.fondo_individual ? parseFloat(c.fondo_individual) : 0;
+
+      // The user wants to see the Total Debt (with Interest) reducing as they pay.
+      // So we subtract what they've "paid off" (based on principal reduction) from the Total Original Debt
+      // AND we subtract what is held in Individual Fund.
+      let deudaMostrar = totalOriginalConInteres - totalPagadoCapital - fondoIndividual;
+      if (deudaMostrar < 0) deudaMostrar = 0;
 
       let tasasHtml = "";
       try {
@@ -310,7 +332,7 @@ window.verDetalle = async dni => {
         }
       } catch (e) { console.error("Error parsing tasas", e); }
 
-      const deuda = c.saldo_pendiente !== null ? c.saldo_pendiente : c.monto;
+      // const deuda ... replaced by calculation above
 
       detalle.innerHTML = `
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
@@ -324,11 +346,11 @@ window.verDetalle = async dni => {
         ${tasasHtml}
         <hr>
         <div style="text-align:center; margin:10px 0;">
-          <p style="font-size:1.2em;"><strong>Deuda Actual</strong></p>
-          <p style="font-size:1.5em; color:#d9534f; font-weight:bold;">S/ ${deuda.toFixed(2)}</p>
+          <p style="font-size:1.2em;"><strong>Total a pagar (con intereses)</strong></p>
+          <p style="font-size:1.5em; color:#d9534f; font-weight:bold;">S/ ${deudaMostrar.toFixed(2)}</p>
         </div>
         
-        <input type="hidden" id="deudaActual" value="${deuda}">
+        <input type="hidden" id="deudaActual" value="${deudaMostrar}">
         <input type="hidden" id="cuotaMensual" value="${cuotaCal.toFixed(2)}">
       `;
 
@@ -342,7 +364,7 @@ window.verDetalle = async dni => {
       }
       if (btnTotal) {
         btnTotal.dataset.dni = c.dni;
-        btnTotal.innerHTML = `Liquidar Deuda<br><small>S/ ${deuda.toFixed(2)}</small>`;
+        btnTotal.innerHTML = `Liquidar Deuda Total<br><small>S/ ${deudaMostrar.toFixed(2)}</small>`;
       }
 
     }
@@ -374,6 +396,18 @@ document.getElementById("btnPagarTotal").onclick = async () => {
   if (!saldo) { alert("Error al obtener deuda."); return; }
 
   realizarPago(dni, saldo, "Liquidación Total");
+};
+
+// 💰 PAGO MANUAL
+document.getElementById("btnPagarManual").onclick = async () => {
+  const btnTotal = document.getElementById("btnPagarTotal"); // Get DNI from existing btn
+  const dni = btnTotal.dataset.dni;
+  const input = document.getElementById("montoManual");
+  const monto = parseFloat(input.value);
+
+  if (!monto || monto <= 1) { alert("⚠️ El monto debe ser mayor a 1."); return; }
+
+  realizarPago(dni, monto, "Pago Manual");
 };
 
 async function realizarPago(dni, monto, concepto) {

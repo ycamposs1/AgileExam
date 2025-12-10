@@ -74,3 +74,24 @@ exports.changePassword = async (req, res) => {
     });
   });
 };
+
+// ==============================
+// 🔹 Info para Cuadre de Caja
+// ==============================
+exports.getCuadreInfo = (req, res) => {
+  if (!req.session.user) return res.status(401).json({ error: "No autenticado" });
+
+  db.get("SELECT monto_total FROM fondos LIMIT 1", [], (err, fondo) => {
+    if (err) return res.status(500).json({ success: false, message: "Error al obtener fondos." });
+
+    db.get("SELECT SUM(fondo_individual) as total_individual FROM prestamos", [], (err2, row) => {
+      if (err2) return res.status(500).json({ success: false, message: "Error al obtener fondos individuales." });
+
+      res.json({
+        success: true,
+        monto_global: fondo ? fondo.monto_total : 0,
+        monto_individual: row ? (row.total_individual || 0) : 0
+      });
+    });
+  });
+};

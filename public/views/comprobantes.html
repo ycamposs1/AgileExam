@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historial de Comprobantes</title>
+    <!-- Reutilizamos estilos existentes para consistencia -->
+    <link rel="stylesheet" href="/css/admin.css">
+    <link rel="stylesheet" href="/css/clientes.css">
+    <style>
+        .container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .search-box {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            width: 300px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+
+        .badge-payment {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .badge-cancel {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>🧾 Historial de Comprobantes</h2>
+            <input type="text" id="buscarInput" class="search-box" placeholder="🔍 Buscar por ID, Cliente o Monto...">
+        </div>
+
+        <div class="table-responsive">
+            <table id="tablaComprobantes">
+                <thead>
+                    <tr>
+                        <th>ID Transacción</th>
+                        <th>Fecha</th>
+                        <th>Cliente</th>
+                        <th>Tipo</th>
+                        <th>Descripción</th>
+                        <th>Monto (S/)</th>
+                    </tr>
+                </thead>
+                <tbody id="listaComprobantes">
+                    <tr>
+                        <td colspan="6" style="text-align:center;">Cargando comprobantes...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="/js/comprobantes.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,128 @@
+[DEBUG] Processing payment for 73095929: 50
+[DEBUG] cerrarYResponder reached for 73095929
+
+[2025-12-10T17:56:29.073Z] INICIO PROCESO DE COMPROBANTE for 73095929
+Email: jeycs04@gmail.com
+✅ PDF Generado: ./comprobante_73095929_1765389389074.pdf
+✅ Correo enviado a jeycs04@gmail.com
+[DEBUG] Processing payment for 71219972: 187.28
+[DEBUG] cerrarYResponder reached for 71219972
+
+[2025-12-10T17:57:08.444Z] INICIO PROCESO DE COMPROBANTE for 71219972
+Email: camposfernando73095929@gmail.com
+✅ PDF Generado: ./comprobante_71219972_1765389428445.pdf
+✅ Correo enviado a camposfernando73095929@gmail.com
+[DEBUG] Processing payment for 73095929: 195.6
+[DEBUG] cerrarYResponder reached for 73095929
+
+[2025-12-10T17:58:03.143Z] INICIO PROCESO DE COMPROBANTE for 73095929
+Email: jeycs04@gmail.com
+✅ PDF Generado: ./comprobante_73095929_1765389483144.pdf
+✅ Correo enviado a jeycs04@gmail.com
+[DEBUG] Processing payment for 73095929: 50
+[DEBUG] cerrarYResponder reached for 73095929
+
+[2025-12-10T17:59:25.251Z] INICIO PROCESO DE COMPROBANTE for 73095929
+Email: jeycs04@gmail.com
+✅ PDF Generado: ./comprobante_73095929_1765389565252.pdf
+✅ Correo enviado a jeycs04@gmail.com
+[DEBUG] Processing payment for 73095929: 195.6
+[DEBUG] cerrarYResponder reached for 73095929
+
+[2025-12-10T18:00:44.963Z] INICIO PROCESO DE COMPROBANTE for 73095929
+Email: jeycs04@gmail.com
+✅ PDF Generado: ./comprobante_73095929_1765389644965.pdf
+✅ Correo enviado a jeycs04@gmail.com
+[DEBUG] Processing payment for 73095929: 80.5716910701276
+[DEBUG] cerrarYResponder reached for 73095929
+
+[2025-12-10T18:02:16.891Z] INICIO PROCESO DE COMPROBANTE for 73095929
+Email: jeycs04@gmail.com
+✅ PDF Generado: ./comprobante_73095929_1765389736892.pdf
+✅ Correo enviado a jeycs04@gmail.com
+[DEBUG] Processing payment for 71219972: 187.28
+[DEBUG] cerrarYResponder reached for 71219972
+
+[2025-12-10T18:03:08.196Z] INICIO PROCESO DE COMPROBANTE for 71219972
+Email: camposfernando73095929@gmail.com
+✅ PDF Generado: ./comprobante_71219972_1765389788197.pdf
+✅ Correo enviado a camposfernando73095929@gmail.com
+[DEBUG] Processing payment for 73095929: 195.6
+[DEBUG] cerrarYResponder reached for 73095929
+
+[2025-12-10T18:17:58.936Z] INICIO PROCESO DE COMPROBANTE for 73095929
+Email: jeycs04@gmail.com
+✅ PDF Generado: ./comprobante_73095929_1765390678938.pdf
+✅ Correo enviado a jeycs04@gmail.com
+[DEBUG] Processing payment for 71219972: 324.5457051620806
+[DEBUG] cerrarYResponder reached for 71219972
+
+[2025-12-10T18:18:04.249Z] INICIO PROCESO DE COMPROBANTE for 71219972
+Email: camposfernando73095929@gmail.com
+✅ PDF Generado: ./comprobante_71219972_1765390684249.pdf
+✅ Correo enviado a camposfernando73095929@gmail.com
+[DEBUG] Processing payment for 73095929: 195.6
+[DEBUG] cerrarYResponder reached for 73095929
+
+[2025-12-10T18:19:44.478Z] INICIO PROCESO DE COMPROBANTE for 73095929
+Email: jeycs04@gmail.com
+✅ PDF Generado: ./comprobante_73095929_1765390784479.pdf
+✅ Correo enviado a jeycs04@gmail.com
+[DEBUG] Processing payment for 73095929: 195.6
+[DEBUG] cerrarYResponder reached for 73095929
+
+[2025-12-10T18:22:39.872Z] INICIO PROCESO DE COMPROBANTE for 73095929
+Email: jeycs04@gmail.com
+✅ PDF Generado: ./comprobante_73095929_1765390959874.pdf
+✅ Correo enviado a jeycs04@gmail.com
+[DEBUG] Processing payment for 73095929: 782.3716910701276
+[DEBUG] cerrarYResponder reached for 73095929
+
+[2025-12-10T18:29:05.046Z] INICIO PROCESO DE COMPROBANTE for 73095929
+Email: jeycs04@gmail.com
+✅ PDF Generado: ./comprobante_73095929_1765391345047.pdf
+✅ Correo enviado a jeycs04@gmail.com
+[DEBUG] Processing payment for 73095929: 195.6
+[DEBUG] cerrarYResponder reached for 73095929
+
+[2025-12-10T18:30:04.609Z] INICIO PROCESO DE COMPROBANTE for 73095929
+Email: jeycs04@gmail.com
+✅ PDF Generado: ./comprobante_73095929_1765391404610.pdf
+✅ Correo enviado a jeycs04@gmail.com
+[DEBUG] Processing payment for 73095929: 977.9716910701276
+[DEBUG] cerrarYResponder reached for 73095929
+
+[2025-12-10T18:30:44.749Z] INICIO PROCESO DE COMPROBANTE for 73095929
+Email: jeycs04@gmail.com
+✅ PDF Generado: ./comprobante_73095929_1765391444749.pdf
+✅ Correo enviado a jeycs04@gmail.com
+[DEBUG] Processing payment for 73095930: 195.6
+[DEBUG] cerrarYResponder reached for 73095930
+
+[2025-12-10T18:34:58.921Z] INICIO PROCESO DE COMPROBANTE for 73095930
+Email: ycamposs1@upao.edu.pe
+✅ PDF Generado: ./comprobante_73095930_1765391698922.pdf
+✅ Correo enviado a ycamposs1@upao.edu.pe
+[DEBUG] Processing payment for 73095930: 195.6
+[DEBUG] cerrarYResponder reached for 73095930
+
+[2025-12-10T19:36:38.326Z] INICIO PROCESO DE COMPROBANTE for 73095930
+Email: ycamposs1@upao.edu.pe
+✅ PDF Generado: ./comprobante_73095930_1765395398327.pdf
+✅ Correo enviado a ycamposs1@upao.edu.pe
+[DEBUG] Processing payment for 73095930: 195.6
+[DEBUG] cerrarYResponder reached for 73095930
+
+[2025-12-10T21:02:47.404Z] INICIO PROCESO DE COMPROBANTE for 73095930
+Email: ycamposs1@upao.edu.pe
+✅ PDF Generado: ./comprobante_73095930_1765400567405.pdf
+✅ Correo enviado a ycamposs1@upao.edu.pe
+[DEBUG] Processing payment for 73095930: 586.7716910701275
+[DEBUG] cerrarYResponder reached for 73095930
+
+[2025-12-10T21:03:02.566Z] INICIO PROCESO DE COMPROBANTE for 73095930
+Email: ycamposs1@upao.edu.pe
+✅ PDF Generado: ./comprobante_73095930_1765400582567.pdf
+✅ Correo enviado a ycamposs1@upao.edu.pe
+[Id: 193] Starting receipt for 71126808 (ycamposs1@upao.edu.pe)
+[Id: 194] Starting receipt for 71126808 (ycamposs1@upao.edu.pe)

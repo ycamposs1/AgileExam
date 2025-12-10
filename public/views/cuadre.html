@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cuadre de Caja</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background-color: #f4f6f9;
+            color: #333;
+        }
+
+        h1 {
+            color: #0c2340;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            color: #555;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1em;
+            box-sizing: border-box;
+        }
+
+        input[readonly] {
+            background-color: #f9f9f9;
+            color: #666;
+            font-weight: bold;
+        }
+
+        .result-section {
+            grid-column: 1 / -1;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .result-box {
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: bold;
+            display: inline-block;
+            min-width: 300px;
+            margin-top: 10px;
+        }
+
+        .match {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .mismatch {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        button {
+            background-color: #0c2340;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-top: 20px;
+            width: 100%;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background-color: #1a3c61;
+        }
+
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>⚖️ Cuadre de Caja Diario</h1>
+
+    <div class="container">
+        <!-- CONTEO FÍSICO -->
+        <div class="card">
+            <h2>💵 Conteo Físico (Bóveda)</h2>
+            <p style="font-size:0.9em; color:#666; margin-bottom:15px;">Ingrese el efectivo real contado.</p>
+
+            <div class="form-group">
+                <label>Bóveda Principal (Fondos Globales)</label>
+                <input type="number" id="fisicoGlobal" step="0.01" placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+                <label>Caja Chica (Fondos Individuales/Retenidos)</label>
+                <input type="number" id="fisicoIndividual" step="0.01" placeholder="0.00">
+            </div>
+
+            <button onclick="verificarCuadre()">Verificar Cuadre</button>
+        </div>
+
+        <!-- SISTEMA -->
+        <div class="card">
+            <h2>💻 Registros del Sistema</h2>
+            <p class="loading" id="loadingSys">Cargando datos...</p>
+
+            <div id="sysData" style="display:none;">
+                <div class="form-group">
+                    <label>Saldo Esperado Global</label>
+                    <input type="text" id="sysGlobal" readonly>
+                </div>
+
+                <div class="form-group">
+                    <label>Saldo Esperado Individual</label>
+                    <input type="text" id="sysIndividual" readonly>
+                </div>
+
+                <div class="form-group" style="margin-top:20px; border-top:1px dashed #ccc; padding-top:10px;">
+                    <label>Total Sistema</label>
+                    <input type="text" id="sysTotal" readonly style="font-size:1.2em; color:#0c2340;">
+                </div>
+            </div>
+        </div>
+
+        <!-- RESULTADOS -->
+        <div class="result-section">
+            <div id="resultado" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        let systemData = { global: 0, individual: 0 };
+
+        async function cargarDatosSistema() {
+            try {
+                const res = await fetch('/api/cuadre-info');
+                const data = await res.json();
+
+                if (data.success) {
+                    systemData.global = parseFloat(data.monto_global);
+                    systemData.individual = parseFloat(data.monto_individual);
+
+                    document.getElementById('sysGlobal').value = `S/ ${systemData.global.toFixed(2)}`;
+                    document.getElementById('sysIndividual').value = `S/ ${systemData.individual.toFixed(2)}`;
+                    document.getElementById('sysTotal').value = `S/ ${(systemData.global + systemData.individual).toFixed(2)}`;
+
+                    document.getElementById('loadingSys').style.display = 'none';
+                    document.getElementById('sysData').style.display = 'block';
+                }
+            } catch (e) {
+                console.error(e);
+                document.getElementById('loadingSys').innerText = "❌ Error al cargar datos del sistema.";
+            }
+        }
+
+        function verificarCuadre() {
+            const fisicoGlobal = parseFloat(document.getElementById('fisicoGlobal').value) || 0;
+            const fisicoIndividual = parseFloat(document.getElementById('fisicoIndividual').value) || 0;
+
+            const diffGlobal = fisicoGlobal - systemData.global;
+            const diffIndividual = fisicoIndividual - systemData.individual;
+            const diffTotal = (fisicoGlobal + fisicoIndividual) - (systemData.global + systemData.individual);
+
+            const resultDiv = document.getElementById('resultado');
+            let html = "";
+            let statusClass = Math.abs(diffTotal) < 0.05 ? "match" : "mismatch";
+            let statusText = Math.abs(diffTotal) < 0.05 ? "✅ CAJA CUADRADA" : "⚠️ DESCUADRE DETECTADO";
+
+            html += `<div class="result-box ${statusClass}">
+                        <div style="font-size:1.5em; margin-bottom:5px;">${statusText}</div>
+                        <div>Diferencia Total: S/ ${diffTotal.toFixed(2)}</div>
+                     </div>`;
+
+            if (Math.abs(diffTotal) >= 0.05) {
+                html += `<div style="margin-top:15px; font-size:0.9em;">
+                            <p>Global: ${diffGlobal >= 0 ? '+' : ''}${diffGlobal.toFixed(2)}</p>
+                            <p>Individual: ${diffIndividual >= 0 ? '+' : ''}${diffIndividual.toFixed(2)}</p>
+                         </div>`;
+            }
+
+            resultDiv.innerHTML = html;
+            resultDiv.style.display = 'block';
+        }
+
+        cargarDatosSistema();
+    </script>
+</body>
+
+</html>

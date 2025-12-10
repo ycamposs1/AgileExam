@@ -5,9 +5,10 @@ const clientesController = require('../controllers/clientesController'); // 👈
 //Cronograma de cliente (SPECIFIC ROUTE MUST BE BEFORE GENERIC)
 router.get('/clientes/:dni/cronograma', clientesController.obtenerCronograma);
 
-// Rutas principales de clientes
+// Rutas para clientes
 router.get('/clientes', clientesController.obtenerClientes);
 router.post('/clientes', clientesController.crearCliente);
+router.get('/comprobantes', clientesController.obtenerComprobantes); // 🔸 Nueva ruta
 
 // Nueva ruta para obtener detalle del cliente por DNI (GENERIC ROUTE)
 router.get('/clientes/:dni', clientesController.obtenerClientePorDni);

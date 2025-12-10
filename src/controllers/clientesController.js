@@ -94,10 +94,12 @@ exports.obtenerClientePorDni = (req, res) => {
       IFNULL(p.fecha_fin, '') AS fecha_fin,
       IFNULL(p.tipo_tasa, 'TEA') AS tipo_tasa,
       p.tasas_detalle,
+      p.tasas_detalle,
+      IFNULL(p.fondo_individual, 0) AS fondo_individual, -- Include individual fund
       IFNULL(p.saldo_pendiente, p.monto) AS saldo_pendiente
     FROM clientes c
     LEFT JOIN prestamos p ON c.id = p.id_cliente
-    WHERE c.dni = ?
+    WHERE c.dni = ? AND (p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01)
     ORDER BY p.id DESC
   `;
 
@@ -205,7 +207,12 @@ exports.crearCliente = (req, res) => {
             }
 
             if (clienteExistente) {
-              insertarPrestamo(clienteExistente.id);
+              // 🔸 ACTUALIZAR DATOS DEL CLIENTE (Email, Dirección, etc.)
+              const updateCliente = `UPDATE clientes SET email = ?, nombre = ?, direccion = ?, departamento = ? WHERE id = ?`;
+              db.run(updateCliente, [email, nombre, direccion, departamento, clienteExistente.id], (errUpdate) => {
+                if (errUpdate) console.error("Error actualizando cliente:", errUpdate);
+                insertarPrestamo(clienteExistente.id);
+              });
             } else {
               // Crear nuevo cliente
               const insertarCliente = `
@@ -261,7 +268,14 @@ exports.crearCliente = (req, res) => {
                 console.log(`✅ Préstamo registrado correctamente (ID: ${idPrestamo})`);
 
                 // 🔹 Registrar actividad
-                const fechaActual = new Date().toISOString().split('T')[0];
+                const now = new Date();
+                const fechaActual = now.getFullYear() + '-' +
+                  String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                  String(now.getDate()).padStart(2, '0') + ' ' +
+                  String(now.getHours()).padStart(2, '0') + ':' +
+                  String(now.getMinutes()).padStart(2, '0') + ':' +
+                  String(now.getSeconds()).padStart(2, '0');
+
                 db.run(
                   `INSERT INTO actividad (fecha, id_prestamo, dni_cliente, tipo, monto, descripcion)
                    VALUES (?, ?, ?, ?, ?, ?)`,
@@ -376,7 +390,7 @@ exports.registrarPago = (req, res) => {
     db.run("BEGIN TRANSACTION");
 
     db.get(
-      `SELECT p.id, p.monto, p.saldo_pendiente, c.nombre, c.email
+      `SELECT p.id, p.monto, p.saldo_pendiente, p.plazo, p.tcea_aplicada, p.fondo_individual, c.nombre, c.email
        FROM prestamos p
        JOIN clientes c ON p.id_cliente = c.id
        WHERE c.dni = ? AND (p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01)
@@ -389,83 +403,135 @@ exports.registrarPago = (req, res) => {
         }
         if (!prestamo) {
           db.run("ROLLBACK");
-          return res.status(404).json({ success: false, message: "No se encontró un préstamo activo para este cliente." });
+          return res.status(404).json({ success: false, message: "No se encontró un préstamo activo." });
         }
 
-        let saldo = prestamo.saldo_pendiente !== null ? prestamo.saldo_pendiente : prestamo.monto;
+        // 🧮 CALCULAR CUOTA MENSUAL REFERENCIAL
+        const i = Math.pow(1 + parseFloat(prestamo.tcea_aplicada), 1 / 12) - 1;
+        const cuotaRef = prestamo.monto * (i / (1 - Math.pow(1 + i, -prestamo.plazo)));
 
-        // 2. Descontar pago
-        saldo -= montoPago;
-        if (saldo < 0) saldo = 0; // No permitir saldo negativo
+        let nuevoSaldo = prestamo.saldo_pendiente !== null ? prestamo.saldo_pendiente : prestamo.monto;
+        let tipoActividad = "";
+        let descripcion = "";
+        let destinoFondo = ""; // 'fondos' o 'individual'
 
-        // DETERMINAR TIPO DE ACTIVIDAD
-        const esCancelacion = saldo < 0.01;
-        const tipoActividad = esCancelacion ? "Cancelación de Préstamo" : "Pago Parcial";
-        const descripcion = `${tipoActividad} - Pago recibido de S/ ${montoPago}`;
+        // 🔸 LÓGICA DE FONDO INDIVIDUAL (SI PAGO < CUOTA)
+        // Se asume tolerancia pequeña por redondeo (e.g. 0.10)
+        if (montoPago < (cuotaRef - 0.10)) {
+          // PAGO PARCIAL -> FONDO INDIVIDUAL
+          destinoFondo = "individual";
+          tipoActividad = "Abono Individual";
+          descripcion = `Abono retenido en caja individual (menor a cuota S/ ${cuotaRef.toFixed(2)})`;
 
-        // 3. Actualizar saldo
-        db.run("UPDATE prestamos SET saldo_pendiente = ? WHERE id = ?", [saldo, prestamo.id], (err2) => {
-          if (err2) {
-            db.run("ROLLBACK");
-            return res.status(500).json({ success: false, message: "Error al actualizar saldo." });
-          }
+          db.run("UPDATE prestamos SET fondo_individual = IFNULL(fondo_individual, 0) + ? WHERE id = ?", [montoPago, prestamo.id], (err2) => {
+            if (err2) {
+              db.run("ROLLBACK");
+              return res.status(500).json({ success: false, message: "Error actualizando fondo individual." });
+            }
+            finalizarTransaccion(tipoActividad, descripcion, false); // false = no global funds
+          });
+        } else {
+          // PAGO COMPLETO -> FONDO GLOBAL
+          destinoFondo = "global";
+          if (nuevoSaldo < 0.01) tipoActividad = "Cancelación de Préstamo";
+          else tipoActividad = "Pago de Cuota";
 
-          // 4. Registrar actividad
-          const fecha = new Date().toISOString().split('T')[0];
+          descripcion = `${tipoActividad} - Pago recibido de S/ ${montoPago}`;
+
+          nuevoSaldo -= montoPago;
+          if (nuevoSaldo < 0) nuevoSaldo = 0;
+
+          db.run("UPDATE prestamos SET saldo_pendiente = ? WHERE id = ?", [nuevoSaldo, prestamo.id], (err2) => {
+            if (err2) {
+              db.run("ROLLBACK");
+              return res.status(500).json({ success: false, message: "Error actualizando saldo." });
+            }
+            finalizarTransaccion(tipoActividad, descripcion, true); // true = add to global funds
+          });
+        }
+
+        function finalizarTransaccion(tipo, desc, afectarFondosGlobales) {
+          // Registrar actividad
+          const now = new Date();
+          const fecha = now.getFullYear() + '-' +
+            String(now.getMonth() + 1).padStart(2, '0') + '-' +
+            String(now.getDate()).padStart(2, '0') + ' ' +
+            String(now.getHours()).padStart(2, '0') + ':' +
+            String(now.getMinutes()).padStart(2, '0') + ':' +
+            String(now.getSeconds()).padStart(2, '0');
+
           db.run(
             `INSERT INTO actividad (fecha, id_prestamo, dni_cliente, tipo, monto, descripcion)
              VALUES (?, ?, ?, ?, ?, ?)`,
-            [fecha, prestamo.id, dni, tipoActividad, montoPago, descripcion],
-            (err3) => {
+            [fecha, prestamo.id, dni, tipo, montoPago, desc],
+            function (err3) {
               if (err3) {
                 db.run("ROLLBACK");
                 return res.status(500).json({ success: false, message: "Error al registrar actividad." });
               }
 
-              // 5. Sumar a fondos (dinero que entra al banco)
-              db.run("UPDATE fondos SET monto_total = monto_total + ?", [montoPago], (err4) => {
-                if (err4) console.error("Error actualizando fondos:", err4);
-              });
+              const idActividad = this.lastID; // 🔸 Capture ID
 
-              db.run("COMMIT");
-              res.json({ success: true, message: "Pago registrado correctamente.", nuevoSaldo: saldo });
-
-              // ==============================
-              // 📩 GENERAR Y ENVIAR COMPROBANTE DE PAGO
-              // ==============================
-              (async () => {
-                try {
-                  const pdfPath = `./comprobante_${dni}_${Date.now()}.pdf`;
-                  const datosComprobante = {
-                    nombre: prestamo.nombre,
-                    dni: dni,
-                    montoPago: parseFloat(montoPago),
-                    nuevoSaldo: saldo,
-                    tipoActividad: tipoActividad
-                  };
-
-                  await generarPDFComprobante(datosComprobante, pdfPath);
-
-                  if (prestamo.email) {
-                    await enviarCorreoComprobante(prestamo.email, prestamo.nombre, pdfPath, datosComprobante);
-                  } else {
-                    console.log("⚠️ Cliente sin email, no se envió comprobante.");
-                  }
-
-                  // Eliminar PDF temporal
-                  setTimeout(() => {
-                    fs.unlink(pdfPath, err => {
-                      if (err) console.error("⚠️ Error borrando comprobante temporal:", err);
-                    });
-                  }, 10000);
-
-                } catch (errReceipt) {
-                  console.error("❌ Error generando comprobante:", errReceipt);
-                }
-              })();
+              if (afectarFondosGlobales) {
+                db.run("UPDATE fondos SET monto_total = monto_total + ?", [montoPago], (err4) => {
+                  if (err4) console.error("Error actualizando fondos:", err4);
+                  cerrarYResponder(idActividad);
+                });
+              } else {
+                cerrarYResponder(idActividad);
+              }
             }
           );
-        });
+        }
+
+        async function cerrarYResponder(idActividad) {
+          db.run("COMMIT");
+          res.json({
+            success: true,
+            message: destinoFondo === 'individual' ? "💰 Pago guardado en Fondo Individual (Insuficiente para cuota)." : "✅ Pago procesado exitosamente.",
+            nuevoSaldo: nuevoSaldo,
+            destino: destinoFondo
+          });
+
+          // ==============================
+          // 📩 GENERAR Y ENVIAR COMPROBANTE DE PAGO
+          // ==============================
+          try {
+            fs.appendFileSync('debug.txt', `[Id: ${idActividad}] Starting receipt for ${dni} (${prestamo.email})\n`);
+          } catch (e) { }
+
+          try {
+            const pdfPath = `./comprobante_${dni}_${Date.now()}.pdf`;
+            const datosComprobante = {
+              nombre: prestamo.nombre,
+              dni: dni,
+              montoPago: parseFloat(montoPago),
+              nuevoSaldo: nuevoSaldo,
+              tipoActividad: tipoActividad || "Pago",
+              idTransaccion: idActividad // 🔸 Pass ID
+            };
+
+            await generarPDFComprobante(datosComprobante, pdfPath);
+
+            if (prestamo.email) {
+              await enviarCorreoComprobante(prestamo.email, prestamo.nombre, pdfPath, datosComprobante);
+            } else {
+              console.log("⚠️ Cliente sin email, no se envió comprobante.");
+            }
+
+            // Eliminar PDF temporal
+            setTimeout(() => {
+              fs.unlink(pdfPath, err => {
+                if (err) console.error("⚠️ Error borrando comprobante temporal:", err);
+              });
+            }, 10000);
+
+          } catch (errReceipt) {
+            console.error("❌ Error generando comprobante:", errReceipt);
+            try { fs.appendFileSync('debug.txt', `❌ ERROR: ${errReceipt.message}\n`); } catch (e) { }
+          }
+        }
+
       }
     );
   });
@@ -712,6 +778,34 @@ async function enviarCorreoConPDF(destinatario, nombreCliente, pdfPath, datos) {
   console.log(`📤 Correo enviado a ${destinatario} vía Web API`);
 }
 
+
+// =======================================================
+// 🔹 LISTAR COMPROBANTES (HISTORIAL DE PAGOS)
+// =======================================================
+exports.obtenerComprobantes = (req, res) => {
+  const query = `
+    SELECT 
+      a.id,
+      a.fecha,
+      c.nombre AS nombre_cliente,
+      a.monto,
+      a.tipo,
+      a.descripcion
+    FROM actividad a
+    JOIN clientes c ON a.dni_cliente = c.dni
+    WHERE a.tipo IN ('Pago de Cuota', 'Cancelación de Préstamo', 'Abono Individual')
+    ORDER BY a.id DESC
+  `;
+
+  db.all(query, [], (err, rows) => {
+    if (err) {
+      console.error("Error obteniendo comprobantes:", err);
+      return res.status(500).json({ success: false, message: "Error al obtener comprobantes." });
+    }
+    res.json({ success: true, comprobantes: rows });
+  });
+};
+
 /* =======================================================
    🔹 GENERAR PDF COMPROBANTE
    ======================================================= */
@@ -731,6 +825,14 @@ async function generarPDFComprobante(datos, rutaArchivo) {
 
     doc.fontSize(14).text(`Detalle de la Transacción`, { underline: true });
     doc.moveDown();
+
+    if (datos.idTransaccion !== undefined) {
+      doc.fontSize(10).text(`Nro. Transacción: ${datos.idTransaccion}`);
+      doc.moveDown(0.5);
+    } else {
+      doc.fontSize(10).text(`Nro. Transacción: (No disponible)`, { color: 'red' });
+      doc.moveDown(0.5);
+    }
 
     doc.fontSize(12).text(`Monto Pagado: S/ ${datos.montoPago.toFixed(2)}`);
     doc.text(`Concepto: ${datos.tipoActividad}`);

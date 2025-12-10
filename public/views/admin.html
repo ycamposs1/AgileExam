@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <title>Panel Administrativo - Banco</title>
@@ -122,7 +123,7 @@
       transition: all 0.3s ease;
     }
 
-    .sidebar.hidden + #toggleSidebar {
+    .sidebar.hidden+#toggleSidebar {
       left: 10px;
     }
 
@@ -146,6 +147,7 @@
     }
   </style>
 </head>
+
 <body>
 
   <!-- Navbar superior -->
@@ -164,6 +166,8 @@
       <img src="../views/assets/logo2.png" alt="Logo Banco" id="logo">
       <a href="/clientes" target="contentFrame" data-section="clientes">Clientes Naturales</a>
       <a href="/actividad" target="contentFrame" data-section="actividad">Registro de Actividad</a>
+      <a href="/cuadre" target="contentFrame" data-section="cuadre">Cuadre de Caja</a>
+      <a href="/comprobantes" target="contentFrame" data-section="comprobantes">Comprobantes</a>
       <a href="/perfil" target="contentFrame" data-section="perfil">Perfil</a>
     </div>
 
@@ -238,12 +242,16 @@
     }
     // Escuchar cuando se actualiza el perfil desde el iframe
     window.addEventListener('message', (event) => {
-    if (event.data.type === 'perfilActualizado') {
+      if (event.data.type === 'perfilActualizado') {
         document.getElementById('bienvenida').textContent = `Bienvenido: ${event.data.username}`;
-    }
+      }
     });
 
-    
+
   </script>
+  <script src="/js/admin.js"></script>
+  <script src="/js/clientes.js"></script>
+  <script src="/js/comprobantes.js"></script> <!-- Nueva lógica -->
 </body>
+
 </html>

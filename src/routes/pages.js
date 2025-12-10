@@ -34,6 +34,14 @@ router.get('/actividad', authMiddleware, (req, res) => {
   res.sendFile(path.join(__dirname, '../../public', 'views', 'actividad.html'));
 });
 
+router.get('/cuadre', authMiddleware, (req, res) => {
+  res.sendFile(path.join(__dirname, '../../public/views/cuadre.html'));
+});
+
+router.get('/comprobantes', authMiddleware, (req, res) => {
+  res.sendFile(path.join(__dirname, '../../public/views/comprobantes.html'));
+});
+
 router.get('/perfil', authMiddleware, (req, res) => {
   res.sendFile(path.join(__dirname, '../../public', 'views', 'perfil.html'));
 });

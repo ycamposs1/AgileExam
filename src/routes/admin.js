@@ -4,7 +4,8 @@ const {
   getInfo,
   getPerfil,
   updatePerfil,
-  changePassword
+  changePassword,
+  getCuadreInfo
 } = require('../controllers/adminController');
 
 // Mostrar info básica del navbar (usuario y fondo)
@@ -18,5 +19,8 @@ router.post('/perfil', updatePerfil);
 
 // Cambiar contraseña del admin
 router.post('/perfil/password', changePassword);
+
+// 🔹 Obtener información de fondos para Cuadre
+router.get('/cuadre-info', getCuadreInfo);
 
 module.exports = router;
