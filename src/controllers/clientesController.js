@@ -376,7 +376,7 @@ exports.registrarPago = (req, res) => {
     db.run("BEGIN TRANSACTION");
 
     db.get(
-      `SELECT p.id, p.monto, p.saldo_pendiente, c.nombre
+      `SELECT p.id, p.monto, p.saldo_pendiente, c.nombre, c.email
        FROM prestamos p
        JOIN clientes c ON p.id_cliente = c.id
        WHERE c.dni = ? AND (p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01)
@@ -393,11 +393,15 @@ exports.registrarPago = (req, res) => {
         }
 
         let saldo = prestamo.saldo_pendiente !== null ? prestamo.saldo_pendiente : prestamo.monto;
-        let descripcion = `Pago recibido de S/ ${montoPago}`;
 
         // 2. Descontar pago
         saldo -= montoPago;
         if (saldo < 0) saldo = 0; // No permitir saldo negativo
+
+        // DETERMINAR TIPO DE ACTIVIDAD
+        const esCancelacion = saldo < 0.01;
+        const tipoActividad = esCancelacion ? "Cancelación de Préstamo" : "Pago Parcial";
+        const descripcion = `${tipoActividad} - Pago recibido de S/ ${montoPago}`;
 
         // 3. Actualizar saldo
         db.run("UPDATE prestamos SET saldo_pendiente = ? WHERE id = ?", [saldo, prestamo.id], (err2) => {
@@ -411,7 +415,7 @@ exports.registrarPago = (req, res) => {
           db.run(
             `INSERT INTO actividad (fecha, id_prestamo, dni_cliente, tipo, monto, descripcion)
              VALUES (?, ?, ?, ?, ?, ?)`,
-            [fecha, prestamo.id, dni, "Pago parcial", montoPago, descripcion],
+            [fecha, prestamo.id, dni, tipoActividad, montoPago, descripcion],
             (err3) => {
               if (err3) {
                 db.run("ROLLBACK");
@@ -425,6 +429,40 @@ exports.registrarPago = (req, res) => {
 
               db.run("COMMIT");
               res.json({ success: true, message: "Pago registrado correctamente.", nuevoSaldo: saldo });
+
+              // ==============================
+              // 📩 GENERAR Y ENVIAR COMPROBANTE DE PAGO
+              // ==============================
+              (async () => {
+                try {
+                  const pdfPath = `./comprobante_${dni}_${Date.now()}.pdf`;
+                  const datosComprobante = {
+                    nombre: prestamo.nombre,
+                    dni: dni,
+                    montoPago: parseFloat(montoPago),
+                    nuevoSaldo: saldo,
+                    tipoActividad: tipoActividad
+                  };
+
+                  await generarPDFComprobante(datosComprobante, pdfPath);
+
+                  if (prestamo.email) {
+                    await enviarCorreoComprobante(prestamo.email, prestamo.nombre, pdfPath, datosComprobante);
+                  } else {
+                    console.log("⚠️ Cliente sin email, no se envió comprobante.");
+                  }
+
+                  // Eliminar PDF temporal
+                  setTimeout(() => {
+                    fs.unlink(pdfPath, err => {
+                      if (err) console.error("⚠️ Error borrando comprobante temporal:", err);
+                    });
+                  }, 10000);
+
+                } catch (errReceipt) {
+                  console.error("❌ Error generando comprobante:", errReceipt);
+                }
+              })();
             }
           );
         });
@@ -672,6 +710,74 @@ async function enviarCorreoConPDF(destinatario, nombreCliente, pdfPath, datos) {
 
   await sgMail.send(msg);
   console.log(`📤 Correo enviado a ${destinatario} vía Web API`);
+}
+
+/* =======================================================
+   🔹 GENERAR PDF COMPROBANTE
+   ======================================================= */
+async function generarPDFComprobante(datos, rutaArchivo) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 50 });
+    const stream = fs.createWriteStream(rutaArchivo);
+    doc.pipe(stream);
+
+    doc.fontSize(20).text("Comprobante de Pago", { align: "center" });
+    doc.moveDown();
+
+    doc.fontSize(12).text(`Fecha: ${new Date().toLocaleDateString()}`);
+    doc.text(`Cliente: ${datos.nombre}`);
+    doc.text(`DNI: ${datos.dni}`);
+    doc.moveDown();
+
+    doc.fontSize(14).text(`Detalle de la Transacción`, { underline: true });
+    doc.moveDown();
+
+    doc.fontSize(12).text(`Monto Pagado: S/ ${datos.montoPago.toFixed(2)}`);
+    doc.text(`Concepto: ${datos.tipoActividad}`);
+    doc.text(`Nuevo Saldo Pendiente: S/ ${datos.nuevoSaldo.toFixed(2)}`);
+
+    doc.moveDown(2);
+    doc.fontSize(10).text("Gracias por su pago.", { align: "center" });
+
+    doc.end();
+    stream.on('finish', resolve);
+    stream.on('error', reject);
+  });
+}
+
+/* =======================================================
+   🔹 ENVIAR CORREO COMPROBANTE
+   ======================================================= */
+async function enviarCorreoComprobante(destinatario, nombreCliente, pdfPath, datos) {
+  const html = `
+    <div style="font-family:Arial,sans-serif;">
+      <p>Estimado/a <strong>${nombreCliente}</strong>,</p>
+      <p>Confirmamos la recepción de su pago por <strong>S/ ${datos.montoPago.toFixed(2)}</strong>.</p>
+      <p><strong>Nuevo Saldo:</strong> S/ ${datos.nuevoSaldo.toFixed(2)}</p>
+      <p>Adjunto encontrará su comprobante de pago.</p>
+      <br>
+      <p><strong>Atentamente,</strong><br>Equipo de <b>Banco Brar</b></p>
+    </div>
+  `;
+
+  const fileBuffer = fs.readFileSync(pdfPath);
+  const attachment = fileBuffer.toString('base64');
+
+  const msg = {
+    to: destinatario,
+    from: { email: process.env.SMTP_FROM, name: 'Banco Brar' },
+    subject: 'Comprobante de Pago - Banco Brar',
+    html,
+    attachments: [{
+      content: attachment,
+      filename: 'Comprobante_Pago.pdf',
+      type: 'application/pdf',
+      disposition: 'attachment'
+    }]
+  };
+
+  await sgMail.send(msg);
+  console.log(`📤 Comprobante enviado a ${destinatario}`);
 }
 
 
