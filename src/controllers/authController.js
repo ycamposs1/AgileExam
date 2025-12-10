@@ -1,26 +1,25 @@
-const bcrypt = require('bcryptjs');
-const db = require('../db');
-const path = require('path');
+const authService = require('../services/authService');
 
-// ==============================
-// 🔹 Mostrar página de login
-// ==============================
-exports.viewLogin = (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'views', 'login.html'));
+exports.renderLogin = (req, res) => {
+  if (req.session.user) {
+    return res.redirect('/admin'); // Redirect if already logged in
+  }
+  res.render('login', { title: 'Login' });
 };
 
-// ==============================
-// 🔹 Procesar login
-// ==============================
-exports.login = (req, res) => {
-  const { username, password } = req.body;
+exports.login = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const user = await authService.findUserByUsername(username);
 
-  db.get("SELECT * FROM admin WHERE username = ?", [username], async (err, user) => {
-    if (err) return res.send("❌ Error al consultar la base de datos");
-    if (!user) return res.send("⚠️ Usuario no encontrado");
+    if (!user) {
+      return res.json({ success: false, message: req.t('error_credentials') });
+    }
 
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return res.send("❌ Contraseña incorrecta");
+    const isValid = await authService.verifyPassword(password, user.password);
+    if (!isValid) {
+      return res.json({ success: false, message: req.t('error_credentials') });
+    }
 
     req.session.user = {
       id: user.id,
@@ -29,33 +28,15 @@ exports.login = (req, res) => {
       movil: user.movil || null
     };
 
-    res.redirect('/admin');
-  });
+    res.json({ success: true, message: "OK" });
+  } catch (error) {
+    console.error(error);
+    res.json({ success: false, message: req.t('error_server') });
+  }
 };
 
-// ==============================
-// 🔹 Cerrar sesión
-// ==============================
 exports.logout = (req, res) => {
   req.session.destroy(() => {
     res.redirect('/');
-  });
-};
-
-// ==============================
-// 🔹 Crear nuevo administrador
-// ==============================
-exports.crearAdmin = async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.send("⚠️ Usuario y contraseña requeridos.");
-
-  const hash = await bcrypt.hash(password, 10);
-
-  db.run("INSERT INTO admin (username, password) VALUES (?, ?)", [username, hash], (err) => {
-    if (err) {
-      console.error("Error creando admin:", err);
-      return res.send("❌ Error creando usuario (posiblemente duplicado).");
-    }
-    res.send("✅ Usuario creado correctamente.");
   });
 };

@@ -7,12 +7,11 @@ const i18nextMiddleware = require('i18next-http-middleware');
 
 // Routes
 const authRoutes = require('./src/routes/authRoutes');
-// Temporarily comment out other routes until files are moved/refactored
-// const adminRoutes = require('./src/routes/admin');
-// const clientesRoutes = require('./src/routes/clientes');
-// const reniecRoutes = require('./src/routes/reniec');
-// const actividadRoutes = require('./src/routes/actividad');
-// const pageRoutes = require('./src/routes/pages'); // Will be replaced
+const adminRoutes = require('./src/routes/admin');
+const clientesRoutes = require('./src/routes/clientes');
+const reniecRoutes = require('./src/routes/reniec');
+const actividadRoutes = require('./src/routes/actividad');
+const pageRoutes = require('./src/routes/pages'); // Will be replaced
 
 const app = express();
 
@@ -35,13 +34,12 @@ app.use(session({
 }));
 
 // Routes
+app.use('/', pageRoutes);
 app.use('/', authRoutes);
-
-// Dashboard Stub (Until PageRoutes is ready)
-app.get('/api/dashboard', (req, res) => {
-  if (!req.session.user) return res.redirect('/');
-  res.render('dashboard', { user: req.session.user, t: req.t });
-});
+app.use('/api', adminRoutes);
+app.use('/api', clientesRoutes);
+app.use('/api', reniecRoutes);
+app.use('/api', actividadRoutes);
 
 
 const PORT = process.env.PORT || 3000;

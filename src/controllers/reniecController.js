@@ -1,4 +1,5 @@
 const axios = require('axios');
+const db = require('../config/database');
 
 exports.consultarDNI = async (req, res) => {
   const { dni } = req.body;

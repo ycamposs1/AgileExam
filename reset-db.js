@@ -6,5 +6,5 @@ db.serialize(() => {
   db.run("DELETE FROM actividad");
   db.run("DELETE FROM fondos");
   db.run("VACUUM");
-  console.log("✅ Base de datos limpiada correctamente.");
+  console.log("Base de datos limpiada");
 });

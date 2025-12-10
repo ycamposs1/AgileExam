@@ -1,4 +1,4 @@
-const db = require('../db');
+const db = require('../config/database');
 const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
@@ -41,9 +41,12 @@ exports.obtenerClientes = (req, res) => {
       IFNULL(p.monto, 0) AS monto,
       IFNULL(p.plazo, 0) AS plazo,
       IFNULL(p.fecha_inicio, '') AS fecha_inicio,
-      IFNULL(p.fecha_fin, '') AS fecha_fin
+      IFNULL(p.fecha_fin, '') AS fecha_fin,
+      IFNULL(p.tipo_tasa, 'TEA') AS tipo_tasa,
+      IFNULL(p.saldo_pendiente, p.monto) AS saldo_pendiente
     FROM clientes c
     LEFT JOIN prestamos p ON c.id = p.id_cliente
+    WHERE (p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01)
     ORDER BY c.id DESC
   `;
 
@@ -88,10 +91,14 @@ exports.obtenerClientePorDni = (req, res) => {
       IFNULL(p.monto, 0) AS monto, 
       IFNULL(p.plazo, 0) AS plazo,
       IFNULL(p.fecha_inicio, '') AS fecha_inicio, 
-      IFNULL(p.fecha_fin, '') AS fecha_fin
+      IFNULL(p.fecha_fin, '') AS fecha_fin,
+      IFNULL(p.tipo_tasa, 'TEA') AS tipo_tasa,
+      p.tasas_detalle,
+      IFNULL(p.saldo_pendiente, p.monto) AS saldo_pendiente
     FROM clientes c
     LEFT JOIN prestamos p ON c.id = p.id_cliente
     WHERE c.dni = ?
+    ORDER BY p.id DESC
   `;
 
   db.get(query, [dni], (err, row) => {
@@ -123,8 +130,10 @@ exports.crearCliente = (req, res) => {
       direccion,
       monto,
       plazo,
-      tipo_prestamo,
+      tipo_prestamo = "Personal", // Default
       tcea_aplicada,
+      tasas_detalle, // New field, stringified JSON
+      tipo_tasa,
       fecha_inicio,
       fecha_fin,
       tipo,        // natural | pep
@@ -135,7 +144,7 @@ exports.crearCliente = (req, res) => {
     // =========================
     // 🔸 Validación de campos
     // =========================
-    if (!dni || !nombre || !email || !monto || !fecha_inicio || !fecha_fin || !tipo_prestamo || !tcea_aplicada || !tipo) {
+    if (!dni || !nombre || !email || !monto || !fecha_inicio || !fecha_fin || !tcea_aplicada || !tipo || !tipo_tasa) {
       return res.status(400).json({
         success: false,
         message: "Faltan campos obligatorios."
@@ -155,7 +164,7 @@ exports.crearCliente = (req, res) => {
     db.get(
       `SELECT p.id FROM prestamos p
        JOIN clientes c ON p.id_cliente = c.id
-       WHERE c.dni = ?;`,
+       WHERE c.dni = ? AND (p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01);`,
       [dni],
       (err, existingLoan) => {
         if (err) {
@@ -235,13 +244,13 @@ exports.crearCliente = (req, res) => {
           // =========================
           function insertarPrestamo(idCliente) {
             const insertarPrestamoSQL = `
-              INSERT INTO prestamos (id_cliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
+              INSERT INTO prestamos (id_cliente, tipo_prestamo, monto, plazo, tcea_aplicada, tasas_detalle, tipo_tasa, fecha_inicio, fecha_fin)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             `;
 
             db.run(
               insertarPrestamoSQL,
-              [idCliente, tipo_prestamo, monto, plazo, tcea_aplicada, fecha_inicio, fecha_fin],
+              [idCliente, tipo_prestamo || 'Personal', monto, plazo, tcea_aplicada, tasas_detalle || null, tipo_tasa || 'MULTIPLE', fecha_inicio, fecha_fin],
               async function (err) {
                 if (err) {
                   console.error("Error préstamo:", err);
@@ -324,33 +333,105 @@ exports.crearCliente = (req, res) => {
   }
 };
 
-    
 
 
 
 
 
 
-  // ------------------------------
-  // 🧮 Función auxiliar: Cronograma con TCEA
-  // ------------------------------
-  function generarCronograma(fechaInicio, montoTotal, meses, tcea) {
-    const pagos = [];
-    const i = Math.pow(1 + parseFloat(tcea), 1 / 12) - 1; // tasa mensual
-    const cuota = montoTotal * (i / (1 - Math.pow(1 + i, -meses))); // fórmula de anualidades
-    let fecha = new Date(fechaInicio);
 
-    for (let n = 1; n <= meses; n++) {
-      fecha.setMonth(fecha.getMonth() + 1);
-      pagos.push({
-        nro_cuota: n,
-        fecha_pago: fecha.toISOString().split('T')[0],
-        monto: parseFloat(cuota.toFixed(2))
-      });
-    }
+// ------------------------------
+// 🧮 Función auxiliar: Cronograma con TCEA
+// ------------------------------
+function generarCronograma(fechaInicio, montoTotal, meses, tcea) {
+  const pagos = [];
+  const i = Math.pow(1 + parseFloat(tcea), 1 / 12) - 1; // tasa mensual
+  const cuota = montoTotal * (i / (1 - Math.pow(1 + i, -meses))); // fórmula de anualidades
+  let fecha = new Date(fechaInicio);
 
-    return pagos;
+  for (let n = 1; n <= meses; n++) {
+    fecha.setMonth(fecha.getMonth() + 1);
+    pagos.push({
+      nro_cuota: n,
+      fecha_pago: fecha.toISOString().split('T')[0],
+      monto: parseFloat(cuota.toFixed(2))
+    });
   }
+
+  return pagos;
+}
+
+// =======================================================
+// 🔹 REGISTRAR PAGO (Lógica simplificada)
+// =======================================================
+exports.registrarPago = (req, res) => {
+  const { dni } = req.params;
+  const { montoPago } = req.body; // Solo montoPago
+
+  if (!montoPago || montoPago <= 0) {
+    return res.status(400).json({ success: false, message: "Monto de pago inválido." });
+  }
+
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+
+    db.get(
+      `SELECT p.id, p.monto, p.saldo_pendiente, c.nombre
+       FROM prestamos p
+       JOIN clientes c ON p.id_cliente = c.id
+       WHERE c.dni = ? AND (p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01)
+       ORDER BY p.id DESC LIMIT 1`,
+      [dni],
+      (err, prestamo) => {
+        if (err) {
+          db.run("ROLLBACK");
+          return res.status(500).json({ success: false, message: "Error al buscar préstamo." });
+        }
+        if (!prestamo) {
+          db.run("ROLLBACK");
+          return res.status(404).json({ success: false, message: "No se encontró un préstamo activo para este cliente." });
+        }
+
+        let saldo = prestamo.saldo_pendiente !== null ? prestamo.saldo_pendiente : prestamo.monto;
+        let descripcion = `Pago recibido de S/ ${montoPago}`;
+
+        // 2. Descontar pago
+        saldo -= montoPago;
+        if (saldo < 0) saldo = 0; // No permitir saldo negativo
+
+        // 3. Actualizar saldo
+        db.run("UPDATE prestamos SET saldo_pendiente = ? WHERE id = ?", [saldo, prestamo.id], (err2) => {
+          if (err2) {
+            db.run("ROLLBACK");
+            return res.status(500).json({ success: false, message: "Error al actualizar saldo." });
+          }
+
+          // 4. Registrar actividad
+          const fecha = new Date().toISOString().split('T')[0];
+          db.run(
+            `INSERT INTO actividad (fecha, id_prestamo, dni_cliente, tipo, monto, descripcion)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [fecha, prestamo.id, dni, "Pago parcial", montoPago, descripcion],
+            (err3) => {
+              if (err3) {
+                db.run("ROLLBACK");
+                return res.status(500).json({ success: false, message: "Error al registrar actividad." });
+              }
+
+              // 5. Sumar a fondos (dinero que entra al banco)
+              db.run("UPDATE fondos SET monto_total = monto_total + ?", [montoPago], (err4) => {
+                if (err4) console.error("Error actualizando fondos:", err4);
+              });
+
+              db.run("COMMIT");
+              res.json({ success: true, message: "Pago registrado correctamente.", nuevoSaldo: saldo });
+            }
+          );
+        });
+      }
+    );
+  });
+};
 
 
 // =======================================================

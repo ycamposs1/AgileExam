@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <title>Clientes Naturales</title>
   <link rel="stylesheet" href="/css/clientes.css">
 </head>
+
 <body>
   <h2>Clientes Naturales</h2>
 
@@ -16,7 +18,7 @@
   <!-- LISTA -->
   <div class="section active" id="lista-section">
     <div class="toolbar">
-      <button id="btnRecargar">🔄 Recargar</button>
+      <button id="btnRecargar">Recargar</button>
       <span id="msgLista" class="loading">Cargando lista de clientes...</span>
     </div>
     <table id="tabla-clientes">
@@ -25,7 +27,7 @@
           <th>DNI</th>
           <th>Nombre</th>
           <th>Tipo de préstamo</th>
-          <th>TCEA (%)</th>
+          <th>Tasa (%)</th>
           <th>Plazo (meses)</th>
           <th>Cuota mensual (S/)</th>
           <th>Total a pagar (S/)</th>
@@ -47,10 +49,10 @@
     <form id="crearForm">
 
       <label for="tipoCliente">Tipo de cliente</label>
-        <select id="tipoCliente" required>
-          <option value="natural" selected>Persona Natural</option>
-          <option value="pep">Persona Expuesta Políticamente (PEP)</option>
-        </select>
+      <select id="tipoCliente" required>
+        <option value="natural" selected>Persona Natural</option>
+        <option value="pep">Persona Expuesta Políticamente (PEP)</option>
+      </select>
 
 
       <label for="dni">DNI</label>
@@ -93,24 +95,124 @@
       </div>
 
 
-      <label for="tipoPrestamo">Tipo de préstamo</label>
-      <select id="tipoPrestamo" required>
-        <option value="">Seleccione...</option>
-        <option value="personal">Personal</option>
-        <option value="vehicular">Vehicular</option>
-        <option value="hipotecario">Hipotecario</option>
-        <option value="educativo">Educativo</option>
-      </select>
+      <!-- <label for="tipoPrestamo">Tipo de préstamo</label> -->
+      <!-- <select id="tipoPrestamo" required> -->
+      <!--   <option value="">Seleccione...</option> -->
+      <!--   <option value="personal">Personal</option> -->
+      <!--   <option value="vehicular">Vehicular</option> -->
+      <!--   <option value="hipotecario">Hipotecario</option> -->
+      <!-- ESTILO PERSONALIZADO PARA TARJETAS DE TASAS -->
+      <style>
+        .rate-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: 15px;
+          margin-bottom: 20px;
+        }
 
-      <label for="tceaSelect">TCEA (%)</label>
-      <select id="tceaSelect" required>
-        <option value="">Seleccione tipo de préstamo primero</option>
-      </select>
+        .rate-card {
+          background: #fff;
+          border: 2px solid #e0e0e0;
+          border-radius: 8px;
+          padding: 15px;
+          text-align: center;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          position: relative;
+        }
 
-      <div id="tceaManualContainer" style="display:none;">
-        <label for="tceaManual">TCEA personalizada (%)</label>
-        <input type="number" id="tceaManual" min="0" max="200" step="0.01" placeholder="Ej: 18.5">
+        .rate-card:hover {
+          border-color: #007bff;
+          box-shadow: 0 4px 8px rgba(0, 123, 255, 0.1);
+        }
+
+        .rate-card.active {
+          border-color: #007bff;
+          background: #f0f8ff;
+        }
+
+        .rate-card input[type="checkbox"] {
+          transform: scale(1.2);
+          margin-bottom: 8px;
+          cursor: pointer;
+        }
+
+        .rate-card label {
+          display: block;
+          font-weight: bold;
+          margin-bottom: 8px;
+          color: #333;
+          cursor: pointer;
+        }
+
+        .rate-input-container {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          display: none;
+          /* Controlled by JS */
+          margin-top: 5px;
+        }
+
+        .rate-input {
+          width: 60px;
+          padding: 6px;
+          border: 1px solid #ccc;
+          border-radius: 4px;
+          text-align: center;
+          font-size: 1rem;
+        }
+
+        .rate-symbol {
+          font-weight: bold;
+          margin-left: 5px;
+          color: #555;
+        }
+      </style>
+
+      <label style="font-size:1.1em; margin-bottom:10px; display:block;">Tasas de Interés Aplicables</label>
+
+      <div class="rate-grid">
+        <!-- TEA Card -->
+        <div class="rate-card" onclick="document.getElementById('checkTEA').click()">
+          <input type="checkbox" id="checkTEA" class="rate-check" value="TEA" onclick="event.stopPropagation()">
+          <label for="checkTEA">TEA</label>
+          <div class="rate-input-container" id="containerTEA">
+            <input type="number" id="inputTEA" class="rate-input" placeholder="0.00" step="0.01" min="0"
+              onclick="event.stopPropagation()">
+            <span class="rate-symbol">%</span>
+          </div>
+        </div>
+
+        <!-- TREA Card -->
+        <div class="rate-card" onclick="document.getElementById('checkTREA').click()">
+          <input type="checkbox" id="checkTREA" class="rate-check" value="TREA" onclick="event.stopPropagation()">
+          <label for="checkTREA">TREA</label>
+          <div class="rate-input-container" id="containerTREA">
+            <input type="number" id="inputTREA" class="rate-input" placeholder="0.00" step="0.01" min="0"
+              onclick="event.stopPropagation()">
+            <span class="rate-symbol">%</span>
+          </div>
+        </div>
+
+        <!-- TCEA Card -->
+        <div class="rate-card" onclick="document.getElementById('checkTCEA').click()">
+          <input type="checkbox" id="checkTCEA" class="rate-check" value="TCEA" onclick="event.stopPropagation()">
+          <label for="checkTCEA">TCEA</label>
+          <div class="rate-input-container" id="containerTCEA">
+            <input type="number" id="inputTCEA" class="rate-input" placeholder="0.00" step="0.01" min="0"
+              onclick="event.stopPropagation()">
+            <span class="rate-symbol">%</span>
+          </div>
+        </div>
       </div>
+
+      <!-- Input oculto para compatibilidad con backend si es necesario -->
+      <input type="hidden" id="tasaInteres" value="0">
+
+      <p id="tasaHelpText" style="font-size:0.85em; color:#555; margin-bottom:15px; font-style:italic;">
+        Seleccione una o más tasas e ingrese sus respectivos porcentajes.
+      </p>
 
       <label for="fechaInicio">Fecha de inicio</label>
       <input type="date" id="fechaInicio" readonly>
@@ -128,7 +230,7 @@
       <label for="fechaFin">Fecha de fin</label>
       <input type="date" id="fechaFin" readonly>
 
-      <button type="submit">💾 Guardar Cliente</button>
+      <button type="submit">Guardar Cliente</button>
       <p id="msgForm"></p>
     </form>
   </div>
@@ -138,8 +240,20 @@
     <div class="modal-content">
       <h3>Detalles del Cliente</h3>
       <div id="detalleCliente"></div>
-      <button id="btnEliminar" class="btn-danger">🗑️ Eliminar</button>
-      <button onclick="cerrarModal()">Cerrar</button>
+
+      <div id="pagoSection" style="margin-top:20px; border-top:1px solid #ccc; padding-top:15px;">
+        <h4>💰 Opciones de Pago</h4>
+
+        <!-- Input oculto para monto manual si se requiere lógica interna, pero usaremos botones -->
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button id="btnPagarCuota" style="background:#007bff; flex:1; padding:12px;">Pagar Cuota Mes</button>
+          <button id="btnPagarTotal" style="background:#28a745; flex:1; padding:12px;">Liquidar Deuda Total</button>
+        </div>
+      </div>
+
+      <div style="margin-top:20px; text-align:right;">
+        <button onclick="cerrarModal()" style="background:#6c757d;">Cerrar</button>
+      </div>
     </div>
   </div>
 
@@ -152,8 +266,9 @@
     justify-content:center;
     align-items:center;
   ">
-    <div style="background:white;padding:20px;border-radius:8px;max-width:700px;width:95%;max-height:90%;overflow:auto;">
-      <h3>📅 Cronograma de pagos</h3>
+    <div
+      style="background:white;padding:20px;border-radius:8px;max-width:700px;width:95%;max-height:90%;overflow:auto;">
+      <h3>Cronograma de pagos</h3>
       <div id="cronogramaContenido"></div>
       <button onclick="cerrarModalCronograma()">Cerrar</button>
     </div>
@@ -163,5 +278,5 @@
   <script src="/js/utils.js"></script>
   <script src="/js/clientes.js"></script>
 </body>
-</html>
 
+</html>

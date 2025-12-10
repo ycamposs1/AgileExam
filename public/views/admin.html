@@ -153,7 +153,7 @@
     <h2>Banco BRAR</h2>
     <div class="right">
       <span id="bienvenida">Bienvenido: usuario</span>
-      <span id="fondos">Cantidad de dinero a prestar: S/ 0.00</span>
+      <span id="fondos">Fondos disponibles: S/ 0.00</span>
       <button onclick="cerrarSesion()">Cerrar Sesión</button>
     </div>
   </div>
@@ -225,7 +225,7 @@
         const res = await fetch('/api/info');
         const data = await res.json();
         document.getElementById('bienvenida').textContent = `Bienvenido: ${data.usuario}`;
-        document.getElementById('fondos').textContent = `Cantidad de dinero a prestar: S/ ${data.monto.toFixed(2)}`;
+        document.getElementById('fondos').textContent = `Fondos disponibles: S/ ${data.monto.toFixed(2)}`;
       } catch (e) {
         console.error("Error cargando datos", e);
       }

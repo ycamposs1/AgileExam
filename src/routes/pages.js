@@ -11,30 +11,31 @@ function authMiddleware(req, res, next) {
 }
 
 // Página principal (login)
-router.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'views', 'login.html'));
-});
+// Página principal (login) - COMENTADO para usar authRoutes (login.ejs) con i18n
+// router.get('/', (req, res) => {
+//   res.sendFile(path.join(__dirname, '../../public', 'views', 'login.html'));
+// });
 
 // Panel principal (admin)
 router.get('/admin', authMiddleware, (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'views', 'admin.html'));
+  res.sendFile(path.join(__dirname, '../../public', 'views', 'admin.html'));
 });
 
 // Secciones internas (cargadas en el iframe)
 router.get('/clientes', authMiddleware, (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'views', 'clientes.html'));
+  res.sendFile(path.join(__dirname, '../../public', 'views', 'clientes.html'));
 });
 
 router.get('/pep', authMiddleware, (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'views', 'pep.html'));
+  res.sendFile(path.join(__dirname, '../../public', 'views', 'pep.html'));
 });
 
 router.get('/actividad', authMiddleware, (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'views', 'actividad.html'));
+  res.sendFile(path.join(__dirname, '../../public', 'views', 'actividad.html'));
 });
 
 router.get('/perfil', authMiddleware, (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'views', 'perfil.html'));
+  res.sendFile(path.join(__dirname, '../../public', 'views', 'perfil.html'));
 });
 
 module.exports = router;

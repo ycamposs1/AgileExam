@@ -1,5 +1,5 @@
 const bcrypt = require('bcryptjs');
-const db = require('../db');
+const db = require('../config/database');
 
 // ==============================
 // 🔹 Obtener info del navbar
@@ -41,9 +41,9 @@ exports.updatePerfil = (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: "No autenticado" });
   const { username, email, movil } = req.body;
 
-  db.run("UPDATE admin SET username=?, email=?, movil=? WHERE id=?", 
-    [username, email, movil, req.session.user.id], 
-    function(err) {
+  db.run("UPDATE admin SET username=?, email=?, movil=? WHERE id=?",
+    [username, email, movil, req.session.user.id],
+    function (err) {
       if (err) return res.json({ error: "Error al actualizar" });
 
       req.session.user.username = username;

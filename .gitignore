@@ -9,6 +9,9 @@ dist/
 build/
 out/
 
+#pdf
+.pdf
+
 # Environment files
 .env
 .env.*
