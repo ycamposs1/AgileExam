@@ -2,13 +2,15 @@ const express = require('express');
 const router = express.Router();
 const clientesController = require('../controllers/clientesController'); // 👈 ESTA LÍNEA ES CLAVE
 
+//Cronograma de cliente (SPECIFIC ROUTE MUST BE BEFORE GENERIC)
+router.get('/clientes/:dni/cronograma', clientesController.obtenerCronograma);
+
 // Rutas principales de clientes
 router.get('/clientes', clientesController.obtenerClientes);
 router.post('/clientes', clientesController.crearCliente);
-// Nueva ruta para obtener detalle del cliente por DNI
+
+// Nueva ruta para obtener detalle del cliente por DNI (GENERIC ROUTE)
 router.get('/clientes/:dni', clientesController.obtenerClientePorDni);
-//cronograma de cliente
-router.get('/clientes/:dni/cronograma', clientesController.obtenerCronograma);
 
 
 

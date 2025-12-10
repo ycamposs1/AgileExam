@@ -516,7 +516,8 @@ exports.obtenerCronograma = (req, res) => {
     SELECT p.monto, p.plazo, p.tcea_aplicada, p.fecha_inicio
     FROM prestamos p
     INNER JOIN clientes c ON p.id_cliente = c.id
-    WHERE c.dni = ?
+    WHERE c.dni = ? AND (p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01)
+    ORDER BY p.id DESC
   `;
 
   db.get(query, [dni], (err, prestamo) => {
@@ -526,7 +527,7 @@ exports.obtenerCronograma = (req, res) => {
     }
 
     if (!prestamo) {
-      return res.json({ success: false, message: "No se encontró préstamo para este cliente." });
+      return res.json({ success: false, message: "No se encontró préstamo activo para este cliente." });
     }
 
     const { monto, plazo, tcea_aplicada, fecha_inicio } = prestamo;
