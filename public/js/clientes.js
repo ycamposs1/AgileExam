@@ -192,6 +192,13 @@ async function guardarCliente(e) {
 
   if (!confirm(msgConf)) return;
 
+  // Determine primary rate label
+  const mainRates = bodyObj.tasas_detalle.filter(t => t.tipo !== 'ITF');
+  let labelTasa = "MULTIPLE";
+  if (mainRates.length === 1) {
+    labelTasa = mainRates[0].tipo;
+  }
+
   const body = {
     dni: document.getElementById("dni").value.trim(),
     email: document.getElementById("email").value.trim(),
@@ -202,12 +209,11 @@ async function guardarCliente(e) {
     departamento: document.getElementById("departamento").value,
     direccion: document.getElementById("direccionCompleta").value.trim(),
     monto: parseFloat(document.getElementById("dinero").value),
-    monto: parseFloat(document.getElementById("dinero").value),
     plazo: parseInt(document.getElementById("plazo").value),
     tipo_prestamo: "Personal",
     tasas_detalle: JSON.stringify(bodyObj.tasas_detalle), // Send as JSON string
     tcea_aplicada: bodyObj.tcea_aplicada,
-    tipo_tasa: "MULTIPLE",
+    tipo_tasa: labelTasa,
     fecha_inicio: document.getElementById("fechaInicio").value,
     fecha_fin: document.getElementById("fechaFin").value,
     tipo: document.getElementById("tipoCliente").value,
@@ -334,6 +340,64 @@ window.verDetalle = async dni => {
 
       // const deuda ... replaced by calculation above
 
+      // 🔹 Lógica Cuota Inteligente
+      let cuotaRestante = cuotaCal - fondoIndividual;
+      if (cuotaRestante < 0) cuotaRestante = 0; // Por si acaso
+
+      // 🔹 Lógica Número de Cuota
+      const fechaInicio = new Date(c.fecha_inicio);
+      const hoy = new Date();
+      // Diferencia en meses
+      let mesesTranscurridos = (hoy.getFullYear() - fechaInicio.getFullYear()) * 12 + (hoy.getMonth() - fechaInicio.getMonth());
+      // Ajuste: si el día actual es menor al día de inicio, no ha pasado el mes completo
+      if (hoy.getDate() < fechaInicio.getDate()) {
+        mesesTranscurridos--;
+      }
+      const nroCuotaActual = mesesTranscurridos + 1;
+
+      // 🟢 Mostrar Número de Cuota en UI
+      const infoCuotaHtml = `<div style="grid-column: span 2; background:#e8f5e9; padding:8px; border-radius:5px; text-align:center;">
+          <strong>📅 Cuota Actual:</strong> #${nroCuotaActual} de ${c.plazo}
+      </div>`;
+
+      // 🔹 Lógica Historial de Pagos
+      let historialHtml = `
+          <div style="margin-top:20px; text-align:left;">
+              <h4 style="margin-bottom:10px;">📜 Historial de Pagos (Últimos 10)</h4>
+              <div style="max-height:150px; overflow-y:auto; border:1px solid #eee;">
+                  <table style="width:100%; border-collapse:collapse; font-size:0.9em;">
+                      <thead style="background:#f8f9fa;">
+                          <tr>
+                              <th style="padding:5px; text-align:left;">Fecha</th>
+                              <th style="padding:5px; text-align:left;">Tipo</th>
+                              <th style="padding:5px; text-align:right;">Monto</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+      `;
+
+      if (data.historial && data.historial.length > 0) {
+        data.historial.forEach(h => {
+          historialHtml += `
+                  <tr style="border-bottom:1px solid #eee;">
+                      <td style="padding:5px;">${h.fecha}</td>
+                      <td style="padding:5px;">${h.tipo}</td>
+                      <td style="padding:5px; text-align:right;">S/ ${parseFloat(h.monto).toFixed(2)}</td>
+                  </tr>
+              `;
+        });
+      } else {
+        historialHtml += `<tr><td colspan="3" style="padding:10px; text-align:center; color:#777;">Sin movimientos</td></tr>`;
+      }
+      historialHtml += `</tbody></table></div></div>`;
+
+      // 🟢 Mostrar Fondo Individual
+      const infoFondoHtml = `
+      <div style="grid-column: span 2; background:#e3f2fd; padding:8px; border-radius:5px; text-align:center; display:flex; justify-content:space-between; align-items:center;">
+          <span>💰 <strong>Fondo Individual Acumulado:</strong></span>
+          <span style="font-size:1.1em; color:#1565c0; font-weight:bold;">S/ ${fondoIndividual.toFixed(2)}</span>
+      </div>`;
+
       detalle.innerHTML = `
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
           <div><p><strong>DNI:</strong> ${c.dni}</p></div>
@@ -342,8 +406,13 @@ window.verDetalle = async dni => {
           <div><p><strong>Plazo:</strong> ${c.plazo} meses</p></div>
           <div><p><strong>Tasa Global (TCEA):</strong> ${(c.tcea_aplicada * 100).toFixed(2)}%</p></div>
           <div><p><strong>Cuota Mensual Ref:</strong> S/ ${cuotaCal.toFixed(2)}</p></div>
+          ${infoCuotaHtml}
+          ${infoFondoHtml}
         </div>
         ${tasasHtml}
+        
+        ${historialHtml}
+
         <hr>
         <div style="text-align:center; margin:10px 0;">
           <p style="font-size:1.2em;"><strong>Total a pagar (con intereses)</strong></p>
@@ -351,7 +420,7 @@ window.verDetalle = async dni => {
         </div>
         
         <input type="hidden" id="deudaActual" value="${deudaMostrar}">
-        <input type="hidden" id="cuotaMensual" value="${cuotaCal.toFixed(2)}">
+        <input type="hidden" id="cuotaMensual" value="${cuotaRestante.toFixed(2)}"> <!-- Usamos la Restante aquí para el botón -->
       `;
 
       // Configurar botones de pago
@@ -360,7 +429,16 @@ window.verDetalle = async dni => {
 
       if (btnCuota) {
         btnCuota.dataset.dni = c.dni;
-        btnCuota.innerHTML = `Pagar Cuota<br><small>S/ ${cuotaCal.toFixed(2)}</small>`;
+        // Si ya cubrió la cuota, deshabilitar o mostrar 0
+        if (cuotaRestante <= 0.10) {
+          btnCuota.innerHTML = `Cuota Pagada ✅<br><small>S/ 0.00</small>`;
+          btnCuota.disabled = true;
+          btnCuota.style.backgroundColor = "#ccc";
+        } else {
+          btnCuota.innerHTML = `Pagar Cuota<br><small>S/ ${cuotaRestante.toFixed(2)}</small>`;
+          btnCuota.disabled = false;
+          btnCuota.style.backgroundColor = ""; // Reset color
+        }
       }
       if (btnTotal) {
         btnTotal.dataset.dni = c.dni;

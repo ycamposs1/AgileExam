@@ -113,7 +113,20 @@ exports.obtenerClientePorDni = (req, res) => {
       return res.status(404).json({ success: false, message: "Cliente no encontrado." });
     }
 
-    res.json({ success: true, cliente: row });
+    // 🔸 Obtener historial de pagos recientes
+    db.all(
+      `SELECT fecha, tipo, monto, descripcion FROM actividad WHERE dni_cliente = ? ORDER BY id DESC LIMIT 10`,
+      [dni],
+      (err2, rowsActividad) => {
+        if (err2) console.error("Error obteniendo historial:", err2);
+
+        res.json({
+          success: true,
+          cliente: row,
+          historial: rowsActividad || []
+        });
+      }
+    );
   });
 };
 
@@ -235,39 +248,56 @@ exports.crearCliente = (req, res) => {
                   tipo === 'pep' ? origen : null,
                   tipo === 'pep' ? destino : null
                 ],
-                function (err) {
-                  if (err) {
-                    console.error("Error al insertar cliente:", err);
-                    return res.status(500).json({ success: false, message: "Error al registrar cliente." });
+                function (errInsertCliente) {
+                  if (errInsertCliente) {
+                    console.error("Error insertando cliente:", errInsertCliente);
+                    db.run("ROLLBACK");
+                    return res.status(500).json({ success: false, message: "Error al crear cliente." });
                   }
-                  insertarPrestamo(this.lastID);
+                  const newClientId = this.lastID;
+                  insertarPrestamo(newClientId);
                 }
               );
             }
           });
 
-          // =========================
-          // 🔸 Función: Insertar préstamo
-          // =========================
           function insertarPrestamo(idCliente) {
-            const insertarPrestamoSQL = `
-              INSERT INTO prestamos (id_cliente, tipo_prestamo, monto, plazo, tcea_aplicada, tasas_detalle, tipo_tasa, fecha_inicio, fecha_fin)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `;
+            // 🔸 Generar tasas_detalle filtrado (solo la seleccionada + ITF)
+            let tasasFinales = [];
+            try {
+              const todasLasTasas = JSON.parse(tasas_detalle || '[]');
+              // Si el usuario seleccionó una tasa específica (tipo_tasa), filtramos
+              if (tipo_tasa) {
+                // Mantener ITF (siempre) y la tasa seleccionada
+                tasasFinales = todasLasTasas.filter(t => t.tipo === 'ITF' || t.tipo === tipo_tasa);
+              } else {
+                tasasFinales = todasLasTasas;
+              }
+            } catch (e) {
+              console.error("Error filtrando tasas", e);
+              tasasFinales = [];
+            }
+            const tasasDetalleStr = JSON.stringify(tasasFinales);
 
+            const insertarPrestamo = `
+              INSERT INTO prestamos 
+              (id_cliente, monto, plazo, tipo_prestamo, saldo_pendiente, tcea_aplicada, tasas_detalle, tipo_tasa, fecha_inicio, fecha_fin)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `;
             db.run(
-              insertarPrestamoSQL,
-              [idCliente, tipo_prestamo || 'Personal', monto, plazo, tcea_aplicada, tasas_detalle || null, tipo_tasa || 'MULTIPLE', fecha_inicio, fecha_fin],
-              async function (err) {
-                if (err) {
-                  console.error("Error préstamo:", err);
-                  return res.status(500).json({ success: false, message: "Error al registrar préstamo." });
+              insertarPrestamo,
+              [idCliente, monto, plazo, tipo_prestamo, monto, tcea_aplicada, tasasDetalleStr, tipo_tasa, fecha_inicio, fecha_fin],
+              function (errInsertPrestamo) {
+                if (errInsertPrestamo) {
+                  console.error("Error insertando préstamo:", errInsertPrestamo);
+                  db.run("ROLLBACK");
+                  return res.status(500).json({ success: false, message: "Error al crear préstamo." });
                 }
 
                 const idPrestamo = this.lastID;
-                console.log(`✅ Préstamo registrado correctamente (ID: ${idPrestamo})`);
+                console.log(`✅ Préstamo registrado (ID: ${idPrestamo})`);
 
-                // 🔹 Registrar actividad
+                // 2. Registrar Actividad (Préstamo otorgado)
                 const now = new Date();
                 const fechaActual = now.getFullYear() + '-' +
                   String(now.getMonth() + 1).padStart(2, '0') + '-' +
@@ -280,20 +310,29 @@ exports.crearCliente = (req, res) => {
                   `INSERT INTO actividad (fecha, id_prestamo, dni_cliente, tipo, monto, descripcion)
                    VALUES (?, ?, ?, ?, ?, ?)`,
                   [fechaActual, idPrestamo, dni, "Préstamo otorgado", -monto, `Se otorgó un préstamo de S/ ${monto} al cliente ${nombre}`],
-                  err2 => {
-                    if (err2) console.error("Error registrando actividad:", err2);
-                    else console.log(`🧾 Actividad registrada: Préstamo otorgado (ID ${idPrestamo})`);
+                  (errActividad) => {
+                    if (errActividad) {
+                      console.error("Error registrando actividad:", errActividad);
+                      // No hacemos rollback critico por esto, pero idealmente si.
+                    }
+
+                    // 3. Descontar fondo global
+                    db.run("UPDATE fondos SET monto_total = monto_total - ?", [monto], (errFondos) => {
+                      if (errFondos) console.error("Error actualizando fondos:", errFondos);
+
+                      // 4. Commit y Responder
+                      db.run("COMMIT", (errCommit) => {
+                        if (errCommit) {
+                          return res.status(500).json({ success: false, message: "Error finalizando transacción." });
+                        }
+                        res.json({
+                          success: true,
+                          message: `✅ Cliente y préstamo registrados correctamente. El cronograma será enviado a ${email}.`
+                        });
+                      });
+                    });
                   }
                 );
-
-                // 🔹 Descontar fondo
-                db.run("UPDATE fondos SET monto_total = monto_total - ?", [monto]);
-
-                // ✅ Responder una sola vez al frontend
-                res.json({
-                  success: true,
-                  message: `✅ Cliente y préstamo registrados correctamente. El cronograma será enviado a ${email}.`
-                });
 
                 // ==============================
                 // 📩 Enviar correo y PDF en fondo
@@ -301,7 +340,7 @@ exports.crearCliente = (req, res) => {
                 (async () => {
                   try {
                     const pagos = generarCronograma(fecha_inicio, monto, plazo, tcea_aplicada);
-                    const pdfPath = `./cronograma_${dni}.pdf`;
+                    const pdfPath = `./ cronograma_${dni}.pdf`;
 
                     await generarPDFCronograma({
                       nombre,
@@ -393,7 +432,7 @@ exports.registrarPago = (req, res) => {
       `SELECT p.id, p.monto, p.saldo_pendiente, p.plazo, p.tcea_aplicada, p.fondo_individual, c.nombre, c.email
        FROM prestamos p
        JOIN clientes c ON p.id_cliente = c.id
-       WHERE c.dni = ? AND (p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01)
+       WHERE c.dni = ? AND(p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01)
        ORDER BY p.id DESC LIMIT 1`,
       [dni],
       (err, prestamo) => {
@@ -421,7 +460,7 @@ exports.registrarPago = (req, res) => {
           // PAGO PARCIAL -> FONDO INDIVIDUAL
           destinoFondo = "individual";
           tipoActividad = "Abono Individual";
-          descripcion = `Abono retenido en caja individual (menor a cuota S/ ${cuotaRef.toFixed(2)})`;
+          descripcion = `Abono retenido en caja individual(menor a cuota S / ${cuotaRef.toFixed(2)})`;
 
           db.run("UPDATE prestamos SET fondo_individual = IFNULL(fondo_individual, 0) + ? WHERE id = ?", [montoPago, prestamo.id], (err2) => {
             if (err2) {
@@ -433,13 +472,19 @@ exports.registrarPago = (req, res) => {
         } else {
           // PAGO COMPLETO -> FONDO GLOBAL
           destinoFondo = "global";
-          if (nuevoSaldo < 0.01) tipoActividad = "Cancelación de Préstamo";
-          else tipoActividad = "Pago de Cuota";
 
-          descripcion = `${tipoActividad} - Pago recibido de S/ ${montoPago}`;
+          descripcion = `${tipoActividad} - Pago recibido de S / ${montoPago}`;
 
           nuevoSaldo -= montoPago;
-          if (nuevoSaldo < 0) nuevoSaldo = 0;
+
+          // 🔸 Corrección de redondeo: Si el saldo es ínfimo, lo cerramos a 0 para que no salga en la lista
+          if (nuevoSaldo < 0.10) {
+            nuevoSaldo = 0;
+            tipoActividad = "Pago Total de Deuda";
+            descripcion = `Pago Total de Deuda - Pago recibido de S/ ${montoPago}`;
+          } else {
+            tipoActividad = "Pago de Cuota";
+          }
 
           db.run("UPDATE prestamos SET saldo_pendiente = ? WHERE id = ?", [nuevoSaldo, prestamo.id], (err2) => {
             if (err2) {
@@ -461,8 +506,8 @@ exports.registrarPago = (req, res) => {
             String(now.getSeconds()).padStart(2, '0');
 
           db.run(
-            `INSERT INTO actividad (fecha, id_prestamo, dni_cliente, tipo, monto, descripcion)
-             VALUES (?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO actividad(fecha, id_prestamo, dni_cliente, tipo, monto, descripcion)
+             VALUES(?, ?, ?, ?, ?, ?)`,
             [fecha, prestamo.id, dni, tipo, montoPago, desc],
             function (err3) {
               if (err3) {
@@ -497,11 +542,11 @@ exports.registrarPago = (req, res) => {
           // 📩 GENERAR Y ENVIAR COMPROBANTE DE PAGO
           // ==============================
           try {
-            fs.appendFileSync('debug.txt', `[Id: ${idActividad}] Starting receipt for ${dni} (${prestamo.email})\n`);
+            fs.appendFileSync('debug.txt', `[Id: ${idActividad}]Starting receipt for ${dni}(${prestamo.email}) \n`);
           } catch (e) { }
 
           try {
-            const pdfPath = `./comprobante_${dni}_${Date.now()}.pdf`;
+            const pdfPath = `./ comprobante_${dni}_${Date.now()}.pdf`;
             const datosComprobante = {
               nombre: prestamo.nombre,
               dni: dni,
@@ -528,7 +573,7 @@ exports.registrarPago = (req, res) => {
 
           } catch (errReceipt) {
             console.error("❌ Error generando comprobante:", errReceipt);
-            try { fs.appendFileSync('debug.txt', `❌ ERROR: ${errReceipt.message}\n`); } catch (e) { }
+            try { fs.appendFileSync('debug.txt', `❌ ERROR: ${errReceipt.message} \n`); } catch (e) { }
           }
         }
 
@@ -559,7 +604,7 @@ exports.eliminarCliente = (req, res) => {
       db.get(`
         SELECT p.id AS id_prestamo, p.monto, p.plazo, p.tcea_aplicada
         FROM prestamos p WHERE p.id_cliente = ?
-      `, [cliente.id], (err, prestamo) => {
+              `, [cliente.id], (err, prestamo) => {
         if (err || !prestamo) {
           db.run("ROLLBACK");
           return res.json({ success: false, message: "Error al recuperar préstamo antes de eliminar." });
@@ -578,12 +623,12 @@ exports.eliminarCliente = (req, res) => {
         // Registrar en tabla actividad
         const fecha = new Date().toISOString().split('T')[0];
         db.run(
-          `INSERT INTO actividad (fecha, id_prestamo, dni_cliente, tipo, monto, descripcion)
-          VALUES (?, ?, ?, ?, ?, ?)`,
-          [fecha, prestamo.id_prestamo, dni, "Pago completado", totalPagado, `El cliente pagó su préstamo (incluye intereses)`],
+          `INSERT INTO actividad(fecha, id_prestamo, dni_cliente, tipo, monto, descripcion)
+            VALUES(?, ?, ?, ?, ?, ?)`,
+          [fecha, prestamo.id_prestamo, dni, "Pago completado", totalPagado, `El cliente pagó su préstamo(incluye intereses)`],
           (err3) => {
             if (err3) console.error("Error registrando pago:", err3);
-            else console.log(`💰 Actividad registrada: Pago completado por ${dni}`);
+            else console.log(`💰 Actividad registrada: Pago completado por ${dni} `);
           }
         );
 
@@ -620,7 +665,7 @@ exports.obtenerCronograma = (req, res) => {
     SELECT p.monto, p.plazo, p.tcea_aplicada, p.fecha_inicio
     FROM prestamos p
     INNER JOIN clientes c ON p.id_cliente = c.id
-    WHERE c.dni = ? AND (p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01)
+    WHERE c.dni = ? AND(p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01)
     ORDER BY p.id DESC
   `;
 
@@ -686,12 +731,12 @@ async function generarPDFCronograma(datos, rutaArchivo) {
     doc.moveDown(1);
 
     doc.fontSize(12)
-      .text(`Cliente: ${datos.nombre}`)
-      .text(`Correo: ${datos.email}`)
-      .text(`Tipo de préstamo: ${datos.tipo_prestamo}`)
-      .text(`Monto total: S/ ${datos.monto.toFixed(2)}`)
+      .text(`Cliente: ${datos.nombre} `)
+      .text(`Correo: ${datos.email} `)
+      .text(`Tipo de préstamo: ${datos.tipo_prestamo} `)
+      .text(`Monto total: S / ${datos.monto.toFixed(2)} `)
       .text(`Plazo: ${datos.plazo} meses`)
-      .text(`TCEA aplicada: ${(datos.tcea_aplicada * 100).toFixed(2)}%`)
+      .text(`TCEA aplicada: ${(datos.tcea_aplicada * 100).toFixed(2)}% `)
       .moveDown(1);
 
     doc.fontSize(14).text("Detalle de Cuotas:", { underline: true });
@@ -722,15 +767,15 @@ async function generarPDFCronograma(datos, rutaArchivo) {
 // =======================================================
 async function enviarCorreoConPDF(destinatario, nombreCliente, pdfPath, datos) {
   const cuotasPreview = (datos.pagos || []).slice(0, 3).map(p => `
-    <tr>
+              < tr >
       <td style="padding:6px;border:1px solid #ccc;text-align:center;">${p.nro_cuota}</td>
       <td style="padding:6px;border:1px solid #ccc;text-align:center;">${p.fecha_pago}</td>
       <td style="padding:6px;border:1px solid #ccc;text-align:center;">S/ ${p.monto.toFixed(2)}</td>
-    </tr>
-  `).join("");
+    </tr >
+              `).join("");
 
   const html = `
-    <div style="font-family:Arial,sans-serif;">
+              < div style = "font-family:Arial,sans-serif;" >
       <p>Estimado/a <strong>${nombreCliente}</strong>,</p>
       <p>Adjunto encontrarás tu <strong>cronograma completo de pagos</strong>.</p>
       <h3>Resumen del préstamo:</h3>
@@ -755,7 +800,7 @@ async function enviarCorreoConPDF(destinatario, nombreCliente, pdfPath, datos) {
       <br>
       <p><strong>Atentamente,</strong><br>Equipo de <b>Banco Brar</b></p>
     </div>
-  `;
+            `;
 
   // Adjuntar PDF como base64
   const fileBuffer = fs.readFileSync(pdfPath);
@@ -784,16 +829,16 @@ async function enviarCorreoConPDF(destinatario, nombreCliente, pdfPath, datos) {
 // =======================================================
 exports.obtenerComprobantes = (req, res) => {
   const query = `
-    SELECT 
-      a.id,
-      a.fecha,
-      c.nombre AS nombre_cliente,
-      a.monto,
-      a.tipo,
-      a.descripcion
+            SELECT
+            a.id,
+              a.fecha,
+              c.nombre AS nombre_cliente,
+                a.monto,
+                a.tipo,
+                a.descripcion
     FROM actividad a
     JOIN clientes c ON a.dni_cliente = c.dni
-    WHERE a.tipo IN ('Pago de Cuota', 'Cancelación de Préstamo', 'Abono Individual')
+    WHERE a.tipo IN('Pago de Cuota', 'Cancelación de Préstamo', 'Abono Individual')
     ORDER BY a.id DESC
   `;
 
@@ -818,25 +863,25 @@ async function generarPDFComprobante(datos, rutaArchivo) {
     doc.fontSize(20).text("Comprobante de Pago", { align: "center" });
     doc.moveDown();
 
-    doc.fontSize(12).text(`Fecha: ${new Date().toLocaleDateString()}`);
-    doc.text(`Cliente: ${datos.nombre}`);
-    doc.text(`DNI: ${datos.dni}`);
+    doc.fontSize(12).text(`Fecha: ${new Date().toLocaleDateString()} `);
+    doc.text(`Cliente: ${datos.nombre} `);
+    doc.text(`DNI: ${datos.dni} `);
     doc.moveDown();
 
     doc.fontSize(14).text(`Detalle de la Transacción`, { underline: true });
     doc.moveDown();
 
     if (datos.idTransaccion !== undefined) {
-      doc.fontSize(10).text(`Nro. Transacción: ${datos.idTransaccion}`);
+      doc.fontSize(10).text(`Nro.Transacción: ${datos.idTransaccion} `);
       doc.moveDown(0.5);
     } else {
-      doc.fontSize(10).text(`Nro. Transacción: (No disponible)`, { color: 'red' });
+      doc.fontSize(10).text(`Nro.Transacción: (No disponible)`, { color: 'red' });
       doc.moveDown(0.5);
     }
 
-    doc.fontSize(12).text(`Monto Pagado: S/ ${datos.montoPago.toFixed(2)}`);
-    doc.text(`Concepto: ${datos.tipoActividad}`);
-    doc.text(`Nuevo Saldo Pendiente: S/ ${datos.nuevoSaldo.toFixed(2)}`);
+    doc.fontSize(12).text(`Monto Pagado: S / ${datos.montoPago.toFixed(2)} `);
+    doc.text(`Concepto: ${datos.tipoActividad} `);
+    doc.text(`Nuevo Saldo Pendiente: S / ${datos.nuevoSaldo.toFixed(2)} `);
 
     doc.moveDown(2);
     doc.fontSize(10).text("Gracias por su pago.", { align: "center" });
@@ -852,7 +897,7 @@ async function generarPDFComprobante(datos, rutaArchivo) {
    ======================================================= */
 async function enviarCorreoComprobante(destinatario, nombreCliente, pdfPath, datos) {
   const html = `
-    <div style="font-family:Arial,sans-serif;">
+          < div style = "font-family:Arial,sans-serif;" >
       <p>Estimado/a <strong>${nombreCliente}</strong>,</p>
       <p>Confirmamos la recepción de su pago por <strong>S/ ${datos.montoPago.toFixed(2)}</strong>.</p>
       <p><strong>Nuevo Saldo:</strong> S/ ${datos.nuevoSaldo.toFixed(2)}</p>
@@ -860,7 +905,7 @@ async function enviarCorreoComprobante(destinatario, nombreCliente, pdfPath, dat
       <br>
       <p><strong>Atentamente,</strong><br>Equipo de <b>Banco Brar</b></p>
     </div>
-  `;
+        `;
 
   const fileBuffer = fs.readFileSync(pdfPath);
   const attachment = fileBuffer.toString('base64');
@@ -879,7 +924,7 @@ async function enviarCorreoComprobante(destinatario, nombreCliente, pdfPath, dat
   };
 
   await sgMail.send(msg);
-  console.log(`📤 Comprobante enviado a ${destinatario}`);
+  console.log(`📤 Comprobante enviado a ${destinatario} `);
 }
 
 
