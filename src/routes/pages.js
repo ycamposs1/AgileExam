@@ -46,4 +46,8 @@ router.get('/perfil', authMiddleware, (req, res) => {
   res.sendFile(path.join(__dirname, '../../public', 'views', 'perfil.html'));
 });
 
+router.get('/mora', authMiddleware, (req, res) => {
+  res.sendFile(path.join(__dirname, '../../public/views/mora.html'));
+});
+
 module.exports = router;

@@ -1,3 +1,4 @@
+console.log("CLIENTES.JS v3 LOADED");
 document.addEventListener("DOMContentLoaded", () => {
   // FECHAS
   const fechaInicioInput = document.getElementById('fechaInicio');
@@ -361,9 +362,11 @@ window.verDetalle = async dni => {
       </div>`;
 
       // 🔹 Lógica Historial de Pagos
+      console.log("Historial recibido:", data.historial); // DEBUG
+
       let historialHtml = `
           <div style="margin-top:20px; text-align:left;">
-              <h4 style="margin-bottom:10px;">📜 Historial de Pagos (Últimos 10)</h4>
+              <h4 style="margin-bottom:10px;">📜 Historial de Pagos Recientes</h4>
               <div style="max-height:150px; overflow-y:auto; border:1px solid #eee;">
                   <table style="width:100%; border-collapse:collapse; font-size:0.9em;">
                       <thead style="background:#f8f9fa;">
@@ -387,7 +390,7 @@ window.verDetalle = async dni => {
               `;
         });
       } else {
-        historialHtml += `<tr><td colspan="3" style="padding:10px; text-align:center; color:#777;">Sin movimientos</td></tr>`;
+        historialHtml += `<tr><td colspan="3" style="padding:10px; text-align:center; color:#777;">Sin movimientos recientes</td></tr>`;
       }
       historialHtml += `</tbody></table></div></div>`;
 
@@ -419,74 +422,88 @@ window.verDetalle = async dni => {
           <p style="font-size:1.5em; color:#d9534f; font-weight:bold;">S/ ${deudaMostrar.toFixed(2)}</p>
         </div>
         
+        <!-- Input de Monto Variable con Validación -->
+        <div style="margin-top:15px; padding:10px; background:#fff3cd; border:1px solid #ffeeba; border-radius:5px;">
+             <label style="display:block; font-weight:bold; margin-bottom:5px;">Monto Variable (S/):</label>
+             <input type="number" id="inputMontoVariable" step="0.01" placeholder="Ingrese monto..." style="width:100%; padding:8px; box-sizing:border-box;">
+             <small style="color:#856404;">Máximo permitido: S/ ${deudaMostrar.toFixed(2)}</small>
+        </div>
+        
         <input type="hidden" id="deudaActual" value="${deudaMostrar}">
-        <input type="hidden" id="cuotaMensual" value="${cuotaRestante.toFixed(2)}"> <!-- Usamos la Restante aquí para el botón -->
+        <input type="hidden" id="cuotaMensual" value="${cuotaRestante.toFixed(2)}">
+
+        <!-- Botones de Pago Dinámicos -->
+        <div style="margin-top:20px; border-top:1px solid #ccc; padding-top:15px; display:flex; gap:10px; flex-wrap:wrap;">
+           <button id="btnPagarCuota" style="background:#007bff; color:white; border:none; border-radius:4px; flex:1; padding:12px; cursor:pointer;">Pagar Cuota</button>
+           <button id="btnPagarTotal" style="background:#28a745; color:white; border:none; border-radius:4px; flex:1; padding:12px; cursor:pointer;">Liquidar Deuda Total</button>
+        </div>
       `;
 
       // Configurar botones de pago
       const btnCuota = document.getElementById("btnPagarCuota");
       const btnTotal = document.getElementById("btnPagarTotal");
+      const inputVariable = document.getElementById("inputMontoVariable");
 
+      // 🛑 Validación del Input Monto Variable
+      if (inputVariable) {
+        inputVariable.addEventListener('input', (e) => {
+          const val = parseFloat(e.target.value);
+          if (val > deudaMostrar) {
+            alert(`⚠️ El monto no puede ser mayor a la deuda total (S/ ${deudaMostrar.toFixed(2)})`);
+            e.target.value = deudaMostrar.toFixed(2);
+          }
+        });
+      }
+
+      // Lógica de Botón Cuota: SIEMPRE DISPONIBLE si hay deuda
       if (btnCuota) {
         btnCuota.dataset.dni = c.dni;
-        // Si ya cubrió la cuota, deshabilitar o mostrar 0
+
+        // Si el usuario escribe en el input variable, el botón usa ese monto
+        btnCuota.onclick = () => {
+          const montoVar = parseFloat(document.getElementById("inputMontoVariable").value);
+          if (montoVar > 0) {
+            realizarPago(c.dni, montoVar, "Pago Variable");
+          } else {
+            // Si no hay monto variable, usa la cuota por defecto (o lo que quede)
+            realizarPago(c.dni, cuotaRestante > 0 ? cuotaRestante : cuotaCal, "Pago de Cuota");
+          }
+        };
+
+        // Texto del botón
         if (cuotaRestante <= 0.10) {
-          btnCuota.innerHTML = `Cuota Pagada ✅<br><small>S/ 0.00</small>`;
-          btnCuota.disabled = true;
-          btnCuota.style.backgroundColor = "#ccc";
-        } else {
-          btnCuota.innerHTML = `Pagar Cuota<br><small>S/ ${cuotaRestante.toFixed(2)}</small>`;
+          // Si ya cubrió la cuota del mes, sugerimos pagar la siguiente o un monto libre
+          btnCuota.innerHTML = `Pagar Cuota / Adelantar<br><small>(Ingrese Monto Arriba)</small>`;
+          // NO DESHABILITAR - Permitir pagos adicionales
           btnCuota.disabled = false;
-          btnCuota.style.backgroundColor = ""; // Reset color
+          btnCuota.style.backgroundColor = "";
+        } else {
+          btnCuota.innerHTML = `Pagar Cuota Mes<br><small>S/ ${cuotaRestante.toFixed(2)}</small>`;
+          btnCuota.disabled = false;
+          btnCuota.style.backgroundColor = "";
         }
       }
+
       if (btnTotal) {
         btnTotal.dataset.dni = c.dni;
         btnTotal.innerHTML = `Liquidar Deuda Total<br><small>S/ ${deudaMostrar.toFixed(2)}</small>`;
+
+        btnTotal.onclick = () => {
+          realizarPago(c.dni, deudaMostrar, "Liquidación Total");
+        };
       }
 
     }
     modal.style.display = "flex";
   } catch (err) {
-    console.error(err);
-    detalle.innerHTML = "<p style='color:red;'>❌ Error al obtener datos.</p>";
-    modal.style.display = "flex";
+    console.error("Error mostrando detalle:", err);
+    alert("Error al cargar los detalles del cliente. Ver consola.");
   }
 };
 
+
 // 💰 PAGO CUOTA
-document.getElementById("btnPagarCuota").onclick = async () => {
-  const btn = document.getElementById("btnPagarCuota");
-  const dni = btn.dataset.dni;
-  const cuota = parseFloat(document.getElementById("cuotaMensual").value); // Retrieve stored cuota
 
-  if (!cuota) { alert("Error al obtener cuota."); return; }
-
-  realizarPago(dni, cuota, "Cuota Mensual");
-};
-
-// 💰 PAGO TOTAL
-document.getElementById("btnPagarTotal").onclick = async () => {
-  const btn = document.getElementById("btnPagarTotal");
-  const dni = btn.dataset.dni;
-  const saldo = parseFloat(document.getElementById("deudaActual").value);
-
-  if (!saldo) { alert("Error al obtener deuda."); return; }
-
-  realizarPago(dni, saldo, "Liquidación Total");
-};
-
-// 💰 PAGO MANUAL
-document.getElementById("btnPagarManual").onclick = async () => {
-  const btnTotal = document.getElementById("btnPagarTotal"); // Get DNI from existing btn
-  const dni = btnTotal.dataset.dni;
-  const input = document.getElementById("montoManual");
-  const monto = parseFloat(input.value);
-
-  if (!monto || monto <= 1) { alert("⚠️ El monto debe ser mayor a 1."); return; }
-
-  realizarPago(dni, monto, "Pago Manual");
-};
 
 async function realizarPago(dni, monto, concepto) {
   if (!confirm(`¿Confirmar pago de ${concepto}:\nS/ ${monto.toFixed(2)}?`)) return;

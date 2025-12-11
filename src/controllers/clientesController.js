@@ -78,6 +78,113 @@ exports.obtenerClientes = (req, res) => {
 
 
 // =======================================================
+// 🔸 SIMULADOR DE MORA
+// =======================================================
+exports.obtenerSimulacionMora = (req, res) => {
+  // 1. Fetch all clients with active loans
+  const query = `
+      SELECT 
+        c.id, c.dni, c.nombre, 
+        p.monto, p.plazo, p.tcea_aplicada, p.fecha_inicio,
+        IFNULL(p.fondo_individual, 0) AS fondo_individual,
+        IFNULL(p.saldo_pendiente, p.monto) AS saldo_pendiente_principal
+      FROM clientes c
+      JOIN prestamos p ON c.id = p.id_cliente
+      WHERE (p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01)
+    `;
+
+  db.all(query, [], (err, rows) => {
+    if (err) {
+      console.error("Error en simulador:", err);
+      return res.status(500).json({ success: false, message: "Error al obtener datos." });
+    }
+
+    const simulacion = [];
+
+    rows.forEach(cliente => {
+      // --- 1. Calculate Current Real Debt ---
+      const i = Math.pow(1 + parseFloat(cliente.tcea_aplicada), 1 / 12) - 1;
+      const cuotaRef = cliente.monto * (i / (1 - Math.pow(1 + i, -cliente.plazo)));
+      const totalOriginalConInteres = cuotaRef * cliente.plazo;
+
+      // Paid Capital = Original Principal - Current Principal Balance
+      const saldoPrincipalActual = parseFloat(cliente.saldo_pendiente_principal);
+      const totalPagadoCapital = parseFloat(cliente.monto) - saldoPrincipalActual;
+
+      // DEUDA ACTUAL
+      let deudaActual = totalOriginalConInteres - totalPagadoCapital - parseFloat(cliente.fondo_individual);
+      if (deudaActual < 0) deudaActual = 0;
+
+      // --- 2. Simulation Logic ---
+      const fechaInicio = new Date(cliente.fecha_inicio);
+      const hoy = new Date();
+      let mesesTranscurridos = (hoy.getFullYear() - fechaInicio.getFullYear()) * 12 + (hoy.getMonth() - fechaInicio.getMonth());
+      if (hoy.getDate() < fechaInicio.getDate()) mesesTranscurridos--;
+
+      let plazoRestanteActual = cliente.plazo - mesesTranscurridos;
+      if (plazoRestanteActual < 1) plazoRestanteActual = 1;
+
+      // 🔄 Generar escenarios: Desde 1 mes de atraso hasta el máximo posible (plazo restante - 1)
+      // Si plazoRestante es 5, podemos atrasarnos 1, 2, 3, 4 meses. (Si nos atrasamos 5, el plazo es 0, explosión).
+      // Limite: plazoRestante - 1. Si plazoRestante es 1, no podemos atrasarnos "1 mes" y seguir pagando, seria vencido total.
+
+      const maxDelay = plazoRestanteActual - 1;
+
+      // Si ya no hay margen (e.g. queda 1 mes), mostramos al menos 1 escenario de "Vencimiento Total" o similar?
+      // El usuario pidio: 1 mes, 2 meses, etc y los que faltan.
+
+      let scenariosToRun = maxDelay;
+      if (scenariosToRun < 1) scenariosToRun = 0; // Solo mostramos warning o 1 escenario base
+
+      if (scenariosToRun === 0) {
+        // Caso borde: Queda 1 mes o menos. Simulamos vencimiento inmediato?
+        // Dejamos vacio o mensaje especial.
+        simulacion.push({
+          dni: cliente.dni,
+          nombre: cliente.nombre,
+          deudaActual: deudaActual.toFixed(2),
+          plazoRestanteActual: plazoRestanteActual,
+          mesesAtraso: "N/A",
+          plazoSimulado: 0,
+          moraGenerada: "0.00",
+          nuevaCuotaMensual: "Vencido",
+          nuevaDeudaTotal: deudaActual.toFixed(2),
+          isWarning: true
+        });
+      } else {
+        for (let delay = 1; delay <= scenariosToRun; delay++) {
+          let plazoSimulado = plazoRestanteActual - delay;
+
+          // Mora Accumulada: 1% acumulativo simple o compuesto?
+          // "Mora 1%" usually means monthly penalty.
+          // Formula simple: 1% * DeudaActual * MesesAtraso
+          const mora = deudaActual * 0.01 * delay;
+
+          // Nueva Cuota
+          const nuevaCuotaMensual = (deudaActual + mora) / plazoSimulado;
+          const nuevaDeudaTotal = nuevaCuotaMensual * plazoSimulado;
+
+          simulacion.push({
+            dni: cliente.dni,
+            nombre: cliente.nombre,
+            deudaActual: deudaActual.toFixed(2),
+            plazoRestanteActual: plazoRestanteActual,
+            mesesAtraso: delay,
+            plazoSimulado: plazoSimulado,
+            moraGenerada: mora.toFixed(2),
+            nuevaCuotaMensual: nuevaCuotaMensual.toFixed(2),
+            nuevaDeudaTotal: nuevaDeudaTotal.toFixed(2),
+            isWarning: delay > 1 // Highlight serious delays
+          });
+        }
+      }
+    });
+
+    res.json({ success: true, data: simulacion });
+  });
+};
+
+// =======================================================
 // 🔹 OBTENER DETALLE DE CLIENTE POR DNI
 // =======================================================
 exports.obtenerClientePorDni = (req, res) => {
@@ -95,8 +202,9 @@ exports.obtenerClientePorDni = (req, res) => {
       IFNULL(p.tipo_tasa, 'TEA') AS tipo_tasa,
       p.tasas_detalle,
       p.tasas_detalle,
-      IFNULL(p.fondo_individual, 0) AS fondo_individual, -- Include individual fund
-      IFNULL(p.saldo_pendiente, p.monto) AS saldo_pendiente
+      IFNULL(p.fondo_individual, 0) AS fondo_individual,
+      IFNULL(p.saldo_pendiente, p.monto) AS saldo_pendiente,
+      p.id AS id_prestamo
     FROM clientes c
     LEFT JOIN prestamos p ON c.id = p.id_cliente
     WHERE c.dni = ? AND (p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01)
@@ -113,20 +221,30 @@ exports.obtenerClientePorDni = (req, res) => {
       return res.status(404).json({ success: false, message: "Cliente no encontrado." });
     }
 
-    // 🔸 Obtener historial de pagos recientes
-    db.all(
-      `SELECT fecha, tipo, monto, descripcion FROM actividad WHERE dni_cliente = ? ORDER BY id DESC LIMIT 10`,
-      [dni],
-      (err2, rowsActividad) => {
-        if (err2) console.error("Error obteniendo historial:", err2);
+    // 🔸 Obtener historial de pagos recientes (SOLO del préstamo actual)
+    if (row.id_prestamo) {
+      db.all(
+        `SELECT fecha, tipo, monto, descripcion FROM actividad WHERE id_prestamo = ? ORDER BY id DESC LIMIT 10`,
+        [row.id_prestamo],
+        (err2, rowsActividad) => {
+          if (err2) console.error("Error obteniendo historial:", err2);
 
-        res.json({
-          success: true,
-          cliente: row,
-          historial: rowsActividad || []
-        });
-      }
-    );
+          res.json({
+            success: true,
+            cliente: row,
+            historial: rowsActividad || []
+          });
+        }
+      );
+    } else {
+      // Si no hay préstamo activo, retornar vacío o historial general?
+      // El usuario pidió solo cuotas que ya pagó (del prestamo activo asumimos).
+      res.json({
+        success: true,
+        cliente: row,
+        historial: []
+      });
+    }
   });
 };
 
@@ -219,47 +337,54 @@ exports.crearCliente = (req, res) => {
               return res.status(500).json({ success: false, message: "Error al verificar cliente." });
             }
 
-            if (clienteExistente) {
-              // 🔸 ACTUALIZAR DATOS DEL CLIENTE (Email, Dirección, etc.)
-              const updateCliente = `UPDATE clientes SET email = ?, nombre = ?, direccion = ?, departamento = ? WHERE id = ?`;
-              db.run(updateCliente, [email, nombre, direccion, departamento, clienteExistente.id], (errUpdate) => {
-                if (errUpdate) console.error("Error actualizando cliente:", errUpdate);
-                insertarPrestamo(clienteExistente.id);
-              });
-            } else {
-              // Crear nuevo cliente
-              const insertarCliente = `
+            db.run("BEGIN TRANSACTION", (errTx) => {
+              if (errTx) {
+                console.error("Error starting tx:", errTx);
+                return res.status(500).json({ success: false, message: "Error iniciando transacción" });
+              }
+
+              if (clienteExistente) {
+                // 🔸 ACTUALIZAR DATOS DEL CLIENTE (Email, Dirección, etc.)
+                const updateCliente = `UPDATE clientes SET email = ?, nombre = ?, direccion = ?, departamento = ? WHERE id = ?`;
+                db.run(updateCliente, [email, nombre, direccion, departamento, clienteExistente.id], (errUpdate) => {
+                  if (errUpdate) console.error("Error actualizando cliente:", errUpdate);
+                  insertarPrestamo(clienteExistente.id);
+                });
+              } else {
+                // Crear nuevo cliente
+                const insertarCliente = `
                 INSERT INTO clientes 
                 (dni, nombre, nombres, apellido_paterno, apellido_materno, departamento, direccion, email, tipo, origen, destino)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               `;
-              db.run(
-                insertarCliente,
-                [
-                  dni,
-                  nombre,
-                  nombres,
-                  apellido_paterno,
-                  apellido_materno,
-                  departamento,
-                  direccion,
-                  email,
-                  tipo || 'natural',
-                  tipo === 'pep' ? origen : null,
-                  tipo === 'pep' ? destino : null
-                ],
-                function (errInsertCliente) {
-                  if (errInsertCliente) {
-                    console.error("Error insertando cliente:", errInsertCliente);
-                    db.run("ROLLBACK");
-                    return res.status(500).json({ success: false, message: "Error al crear cliente." });
+                db.run(
+                  insertarCliente,
+                  [
+                    dni,
+                    nombre,
+                    nombres,
+                    apellido_paterno,
+                    apellido_materno,
+                    departamento,
+                    direccion,
+                    email,
+                    tipo || 'natural',
+                    tipo === 'pep' ? origen : null,
+                    tipo === 'pep' ? destino : null
+                  ],
+                  function (errInsertCliente) {
+                    if (errInsertCliente) {
+                      console.error("Error insertando cliente:", errInsertCliente);
+                      db.run("ROLLBACK");
+                      return res.status(500).json({ success: false, message: "Error al crear cliente." });
+                    }
+                    const newClientId = this.lastID;
+                    insertarPrestamo(newClientId);
                   }
-                  const newClientId = this.lastID;
-                  insertarPrestamo(newClientId);
-                }
-              );
-            }
-          });
+                );
+              }
+            }); // End transaction callback
+          }); // End db.get callback
 
           function insertarPrestamo(idCliente) {
             // 🔸 Generar tasas_detalle filtrado (solo la seleccionada + ITF)
@@ -425,6 +550,8 @@ exports.registrarPago = (req, res) => {
     return res.status(400).json({ success: false, message: "Monto de pago inválido." });
   }
 
+  console.log(`💰 Procesando pago para ${dni}: S/ ${montoPago}`);
+
   db.serialize(() => {
     db.run("BEGIN TRANSACTION");
 
@@ -446,57 +573,116 @@ exports.registrarPago = (req, res) => {
         }
 
         // 🧮 CALCULAR CUOTA MENSUAL REFERENCIAL
+        // 🧮 VARIABLES DE CALCULO
         const i = Math.pow(1 + parseFloat(prestamo.tcea_aplicada), 1 / 12) - 1;
         const cuotaRef = prestamo.monto * (i / (1 - Math.pow(1 + i, -prestamo.plazo)));
 
-        let nuevoSaldo = prestamo.saldo_pendiente !== null ? prestamo.saldo_pendiente : prestamo.monto;
+        const totalOriginalConInteres = cuotaRef * prestamo.plazo;
+        let saldoPrincipalActual = prestamo.saldo_pendiente !== null ? prestamo.saldo_pendiente : prestamo.monto;
+        let totalPagadoCapital = prestamo.monto - saldoPrincipalActual;
+
+        // Deuda Total "Real" (Principal + Intereses pendientes de amortizar)
+        // Nota: Esta es la deuda BRUTA antes de restar el fondo individual.
+        let deudaTotalBruta = totalOriginalConInteres - totalPagadoCapital;
+
+        // Dinero disponible para "matar" la deuda hoy
+        // (El pago que trae el usuario + lo que ya tiene guardado)
+        let dineroDisponible = parseFloat(montoPago) + (parseFloat(prestamo.fondo_individual) || 0);
+
+        let nuevoSaldo = saldoPrincipalActual;
         let tipoActividad = "";
         let descripcion = "";
-        let destinoFondo = ""; // 'fondos' o 'individual'
+        let destinoFondo = "";
 
-        // 🔸 LÓGICA DE FONDO INDIVIDUAL (SI PAGO < CUOTA)
-        // Se asume tolerancia pequeña por redondeo (e.g. 0.10)
-        if (montoPago < (cuotaRef - 0.10)) {
-          // PAGO PARCIAL -> FONDO INDIVIDUAL
+        // � BRANCH A: LIQUIDACIÓN TOTAL (Si alcanza el dinero)
+        // Usamos una pequeña tolerancia (0.50)
+        if (dineroDisponible >= (deudaTotalBruta - 0.50)) {
+          // ¡Paga todo!
+          destinoFondo = "global";
+          nuevoSaldo = 0;
+          tipoActividad = "Pago Total de Deuda";
+          descripcion = `Liquidación con Fondo - Pago: S/ ${montoPago} + Fondo: S/ ${prestamo.fondo_individual || 0}`;
+
+          // 1. Vaciar fondo individual
+          db.run("UPDATE prestamos SET fondo_individual = 0 WHERE id = ?", [prestamo.id], (err2) => {
+            if (err2) console.error("Error reset fondo", err2);
+
+            // 2. Cerrar préstamo (Saldo = 0)
+            db.run("UPDATE prestamos SET saldo_pendiente = 0 WHERE id = ?", [prestamo.id], (err3) => {
+              if (err3) {
+                db.run("ROLLBACK");
+                return res.status(500).json({ success: false, message: "Error liquidando." });
+              }
+              // 3. Registrar Transacción (Global funds gets everything? 
+              // Actually, 'fondo_individual' was already in 'fondos' table physically? 
+              // Wait, 'fondos' table tracks CASH ON HAND.
+              // When money went to 'individual', did it go to 'fondos'?
+              // Checking 'registrarPago' logic:
+              // Branch Partial: afectarFondosGlobales = false. So NO.
+              // Branch Global: afectarFondosGlobales = true. So YES.
+
+              // So, the money in 'fondo_individual' is NOT in 'fondos'. 
+              // Only the 'new' money (montoPago) should go to 'fondos' NOW?
+              // OR, does 'fondo_individual' imply it was held aside?
+              // User's previous code: `finalizarTransaccion(..., false)` for individual.
+              // So money in 'individual' was NEVER added to 'fondos'.
+              // implies we must add EVERYTHING (montoPago + fondo_individual) to 'fondos' now?
+              // YES.
+
+              // But 'finalizarTransaccion' logic takes 'montoPago' (from scope? No, it's not passed).
+              // Function 'finalizarTransaccion' uses the global 'desc' and 'tipo' vars but what about amount?
+              // I need to check 'finalizarTransaccion' implementation.
+              // It likely uses 'montoPago' variable from closure.
+
+              // IF I want to add `dineroDisponible` to system funds, I need to hack `montoPago`?
+              // Or modify `finalizarTransaccion` to accept amount.
+
+              // Let's modify `finalizarTransaccion` to take amount arg in this file scope if possible, 
+              // OR just update `montoPago` to `dineroDisponible`.
+
+              // Hack: Update `montoPago` variable? No, it's const.
+              // I will rename `finalizarTransaccion` call to use `dineroDisponible`?
+              // No, I need to see `finalizarTransaccion` definition below.
+
+              finalizarTransaccion(tipoActividad, descripcion, true, dineroDisponible);
+            });
+          });
+
+        }
+        // 🔹 BRANCH B: PAGO PARCIAL (A Fondo Individual)
+        else if (montoPago < (cuotaRef - 0.10)) {
+          // ... Logica existente ...
           destinoFondo = "individual";
-          tipoActividad = "Abono Individual";
-          descripcion = `Abono retenido en caja individual(menor a cuota S / ${cuotaRef.toFixed(2)})`;
-
-          db.run("UPDATE prestamos SET fondo_individual = IFNULL(fondo_individual, 0) + ? WHERE id = ?", [montoPago, prestamo.id], (err2) => {
+          const nuevoFondo = (parseFloat(prestamo.fondo_individual) || 0) + parseFloat(montoPago);
+          db.run("UPDATE prestamos SET fondo_individual = ? WHERE id = ?", [nuevoFondo, prestamo.id], (err2) => {
             if (err2) {
               db.run("ROLLBACK");
-              return res.status(500).json({ success: false, message: "Error actualizando fondo individual." });
+              return res.status(500).json({ success: false, message: "Error actualizando fondo." });
             }
-            finalizarTransaccion(tipoActividad, descripcion, false); // false = no global funds
+            finalizarTransaccion("Abono Individual", `Abono retenido (menor a cuota S/ ${cuotaRef.toFixed(2)})`, false, montoPago);
           });
-        } else {
-          // PAGO COMPLETO -> FONDO GLOBAL
+        }
+        // 🔹 BRANCH C: PAGO DE CUOTA (Directo a Capital)
+        else {
+          // ... Logica existente ...
           destinoFondo = "global";
+          nuevoSaldo -= parseFloat(montoPago); // Standard reduction
+          if (nuevoSaldo < 0.10) nuevoSaldo = 0;
 
-          descripcion = `${tipoActividad} - Pago recibido de S / ${montoPago}`;
-
-          nuevoSaldo -= montoPago;
-
-          // 🔸 Corrección de redondeo: Si el saldo es ínfimo, lo cerramos a 0 para que no salga en la lista
-          if (nuevoSaldo < 0.10) {
-            nuevoSaldo = 0;
-            tipoActividad = "Pago Total de Deuda";
-            descripcion = `Pago Total de Deuda - Pago recibido de S/ ${montoPago}`;
-          } else {
-            tipoActividad = "Pago de Cuota";
-          }
+          tipoActividad = (nuevoSaldo === 0) ? "Pago Total de Deuda" : "Pago de Cuota";
+          descripcion = `${tipoActividad} - Pago recibido de S/ ${montoPago}`;
 
           db.run("UPDATE prestamos SET saldo_pendiente = ? WHERE id = ?", [nuevoSaldo, prestamo.id], (err2) => {
             if (err2) {
               db.run("ROLLBACK");
-              return res.status(500).json({ success: false, message: "Error actualizando saldo." });
+              return res.status(500).json({ success: false });
             }
-            finalizarTransaccion(tipoActividad, descripcion, true); // true = add to global funds
+            finalizarTransaccion(tipoActividad, descripcion, true, montoPago);
           });
         }
 
-        function finalizarTransaccion(tipo, desc, afectarFondosGlobales) {
-          // Registrar actividad
+        // --- HELPER WRAPPER ---
+        function finalizarTransaccion(tipo, desc, afectarFondos, montoReal) {
           const now = new Date();
           const fecha = now.getFullYear() + '-' +
             String(now.getMonth() + 1).padStart(2, '0') + '-' +
@@ -505,78 +691,95 @@ exports.registrarPago = (req, res) => {
             String(now.getMinutes()).padStart(2, '0') + ':' +
             String(now.getSeconds()).padStart(2, '0');
 
-          db.run(
-            `INSERT INTO actividad(fecha, id_prestamo, dni_cliente, tipo, monto, descripcion)
-             VALUES(?, ?, ?, ?, ?, ?)`,
-            [fecha, prestamo.id, dni, tipo, montoPago, desc],
-            function (err3) {
-              if (err3) {
-                db.run("ROLLBACK");
-                return res.status(500).json({ success: false, message: "Error al registrar actividad." });
-              }
+          // Insert Actividad
+          db.run(`INSERT INTO actividad (fecha, tipo, monto, descripcion, dni_cliente, id_cliente) VALUES (?, ?, ?, ?, ?, ?)`,
+            [fecha, tipo, montoReal, desc, dni, prestamo.id_cliente],
+            function (errAct) {
+              if (errAct) console.error(errAct);
+              // Pass ID back for receipt
+              const lastID = this.lastID;
 
-              const idActividad = this.lastID; // 🔸 Capture ID
-
-              if (afectarFondosGlobales) {
-                db.run("UPDATE fondos SET monto_total = monto_total + ?", [montoPago], (err4) => {
-                  if (err4) console.error("Error actualizando fondos:", err4);
-                  cerrarYResponder(idActividad);
+              if (afectarFondos) {
+                db.run(`UPDATE fondos SET monto_total = monto_total + ?`, [montoReal], (errF) => {
+                  if (errF) console.error(errF);
+                  commitAndRespond(lastID);
                 });
               } else {
-                cerrarYResponder(idActividad);
+                commitAndRespond(lastID);
               }
             }
           );
         }
 
-        async function cerrarYResponder(idActividad) {
-          db.run("COMMIT");
-          res.json({
-            success: true,
-            message: destinoFondo === 'individual' ? "💰 Pago guardado en Fondo Individual (Insuficiente para cuota)." : "✅ Pago procesado exitosamente.",
-            nuevoSaldo: nuevoSaldo,
-            destino: destinoFondo
-          });
+        // --- HELPER WRAPPER ---
+        function finalizarTransaccion(tipo, desc, afectarFondos, montoReal) {
+          const now = new Date();
+          const fecha = now.getFullYear() + '-' +
+            String(now.getMonth() + 1).padStart(2, '0') + '-' +
+            String(now.getDate()).padStart(2, '0') + ' ' +
+            String(now.getHours()).padStart(2, '0') + ':' +
+            String(now.getMinutes()).padStart(2, '0') + ':' +
+            String(now.getSeconds()).padStart(2, '0');
 
-          // ==============================
-          // 📩 GENERAR Y ENVIAR COMPROBANTE DE PAGO
-          // ==============================
-          try {
-            fs.appendFileSync('debug.txt', `[Id: ${idActividad}]Starting receipt for ${dni}(${prestamo.email}) \n`);
-          } catch (e) { }
+          // Insert Actividad
+          db.run(`INSERT INTO actividad (fecha, id_prestamo, dni_cliente, tipo, monto, descripcion) VALUES (?, ?, ?, ?, ?, ?)`,
+            [fecha, prestamo.id, dni, tipo, montoReal, desc],
+            function (errAct) {
+              if (errAct) {
+                console.error("Error registro actividad:", errAct);
+                db.run("ROLLBACK");
+                return res.status(500).json({ success: false, message: "Error activity" });
+              }
 
-          try {
-            const pdfPath = `./ comprobante_${dni}_${Date.now()}.pdf`;
-            const datosComprobante = {
-              nombre: prestamo.nombre,
-              dni: dni,
-              montoPago: parseFloat(montoPago),
-              nuevoSaldo: nuevoSaldo,
-              tipoActividad: tipoActividad || "Pago",
-              idTransaccion: idActividad // 🔸 Pass ID
-            };
+              const idActividad = this.lastID;
 
-            await generarPDFComprobante(datosComprobante, pdfPath);
-
-            if (prestamo.email) {
-              await enviarCorreoComprobante(prestamo.email, prestamo.nombre, pdfPath, datosComprobante);
-            } else {
-              console.log("⚠️ Cliente sin email, no se envió comprobante.");
+              if (afectarFondos) {
+                db.run(`UPDATE fondos SET monto_total = monto_total + ?`, [montoReal], (errF) => {
+                  if (errF) console.error(errF);
+                  commitAndRespond(idActividad, montoReal);
+                });
+              } else {
+                commitAndRespond(idActividad, montoReal);
+              }
             }
-
-            // Eliminar PDF temporal
-            setTimeout(() => {
-              fs.unlink(pdfPath, err => {
-                if (err) console.error("⚠️ Error borrando comprobante temporal:", err);
-              });
-            }, 10000);
-
-          } catch (errReceipt) {
-            console.error("❌ Error generando comprobante:", errReceipt);
-            try { fs.appendFileSync('debug.txt', `❌ ERROR: ${errReceipt.message} \n`); } catch (e) { }
-          }
+          );
         }
 
+        function commitAndRespond(idActividad, montoEfectivo) {
+          db.run("COMMIT", async () => {
+            res.json({
+              success: true,
+              message: destinoFondo === 'individual' ? "💰 Pago guardado en Fondo Individual." : "✅ Pago procesado exitosamente.",
+              nuevoSaldo: nuevoSaldo,
+              destino: destinoFondo
+            });
+
+            // 📩 LOGICA DE COMPROBANTE
+            try {
+              // const { generarPDFComprobante, enviarCorreoComprobante } = require('../services/authService'); // REMOVED (Local functions)
+              const fs = require('fs');
+
+              const pdfPath = `./comprobante_${dni}_${Date.now()}.pdf`;
+              const datosComprobante = {
+                nombre: prestamo.nombre,
+                dni: dni,
+                montoPago: parseFloat(montoEfectivo), // Use actual effective amount
+                nuevoSaldo: nuevoSaldo,
+                tipoActividad: tipoActividad || "Pago",
+                idTransaccion: idActividad
+              };
+
+              await generarPDFComprobante(datosComprobante, pdfPath);
+
+              if (prestamo.email) {
+                await enviarCorreoComprobante(prestamo.email, prestamo.nombre, pdfPath, datosComprobante);
+              }
+
+              setTimeout(() => fs.unlink(pdfPath, () => { }), 10000);
+
+            } catch (e) { console.error("Error Receipts:", e); }
+          });
+        }
       }
     );
   });
@@ -743,16 +946,26 @@ async function generarPDFCronograma(datos, rutaArchivo) {
     doc.moveDown(0.5);
 
     // Cabecera de tabla
-    doc.fontSize(12).text("N° Cuota", 60);
-    doc.text("Fecha de pago", 150);
-    doc.text("Monto (S/)", 300);
-    doc.moveDown(0.3);
+    let yHeader = doc.y;
+    doc.fontSize(12).text("N° Cuota", 60, yHeader);
+    doc.text("Fecha de pago", 150, yHeader);
+    doc.text("Monto (S/)", 300, yHeader);
+    doc.moveDown(1.5);
 
     doc.fontSize(11);
+    let y = doc.y; // Start Y position
+
     datos.pagos.forEach(p => {
-      doc.text(p.nro_cuota.toString(), 60);
-      doc.text(p.fecha_pago, 150);
-      doc.text(p.monto.toFixed(2), 300);
+      // Check for page break
+      if (y > 700) {
+        doc.addPage();
+        y = 50;
+      }
+
+      doc.text(p.nro_cuota.toString(), 60, y);
+      doc.text(p.fecha_pago, 150, y);
+      doc.text(p.monto.toFixed(2), 300, y);
+      y += 20; // Increment Y
     });
 
     doc.end();

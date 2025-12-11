@@ -21,4 +21,7 @@ router.delete('/clientes/:dni', clientesController.eliminarCliente);
 // 💰 Nueva ruta para registrar pago
 router.post('/clientes/:dni/pago', clientesController.registrarPago);
 
+// 🔸 Simulador de Mora
+router.get('/mora', clientesController.obtenerSimulacionMora);
+
 module.exports = router;

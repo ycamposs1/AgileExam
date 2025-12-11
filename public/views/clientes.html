@@ -276,29 +276,8 @@
       <div class="modal-body">
         <div id="detalleCliente"></div>
 
-        <div id="pagoSection" style="margin-top:20px; border-top:1px solid #ccc; padding-top:15px;">
-          <h4>💰 Opciones de Pago</h4>
-
-          <!-- Input oculto para monto manual si se requiere lógica interna, pero usaremos botones -->
-          <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button id="btnPagarCuota" style="background:#007bff; flex:1; padding:12px;">Pagar Cuota Mes</button>
-            <button id="btnPagarTotal" style="background:#28a745; flex:1; padding:12px;">Liquidar Deuda Total</button>
-          </div>
-
-          <div style="margin-top:15px; border-top:1px dashed #ccc; padding-top:10px;">
-            <label for="montoManual" style="display:block; margin-bottom:5px; font-weight:bold;">Pago Manual
-              Variable:</label>
-            <div style="display:flex; gap:10px;">
-              <input type="number" id="montoManual" step="0.01" min="1" placeholder="Monto (S/)"
-                style="padding:8px; width:120px;">
-              <button id="btnPagarManual"
-                style="background:#17a2b8; padding:8px 15px; color:white; border:none; border-radius:4px; cursor:pointer;">Pagar
-                Monto</button>
-            </div>
-            <p style="font-size:0.8em; color:#666; margin-top:5px;">Pagos menores a la cuota irán a Fondo Individual.
-            </p>
-          </div>
-        </div>
+        <!-- Seccion de pago dinamica en JS -->
+        <div id="pagoSection"></div>
       </div>
 
       <div class="modal-footer">
