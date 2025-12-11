@@ -34,12 +34,15 @@ app.use(session({
 }));
 
 // Routes
+const cajaRoutes = require('./src/routes/cajaRoutes');
+
 app.use('/', pageRoutes);
 app.use('/', authRoutes);
 app.use('/api', adminRoutes);
 app.use('/api', clientesRoutes);
 app.use('/api', reniecRoutes);
 app.use('/api', actividadRoutes);
+app.use('/api/caja', cajaRoutes);
 
 
 const PORT = process.env.PORT || 3000;

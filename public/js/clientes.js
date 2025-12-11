@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const fechaInicioInput = document.getElementById('fechaInicio');
   const hoyISO = new Date().toISOString().split('T')[0];
   fechaInicioInput.value = hoyISO;
-  fechaInicioInput.min = hoyISO; // Restrict to today onwards
+  // fechaInicioInput.min = hoyISO; // ALLOW BACKDATING
 
   // Recalcular fecha fin si cambia inicio o plazo
   function actualizarFechaFin() {
@@ -107,8 +107,8 @@ async function cargarClientes() {
           <td>${c.fecha_inicio || ''}</td>
           <td>${c.fecha_fin || ''}</td>
           <td class="actions">
-            <button onclick="verDetalle('${c.dni}')">👁️ Ver</button>
-            <button onclick="verCronograma('${c.dni}')">📅 Cronograma</button>
+            <button class="btn btn-secondary" onclick="verDetalle('${c.dni}')">Ver Detalle</button>
+            <button class="btn btn-secondary" onclick="verCronograma('${c.dni}')">Cronograma</button>
           </td>
           <td>${c.tipo}</td>
           <td>${c.origen || '-'}</td>
@@ -126,9 +126,9 @@ async function cargarClientes() {
 async function buscarDNI() {
   const dni = document.getElementById("dni").value.trim();
   const msgForm = document.getElementById("msgForm");
-  if (dni.length !== 8) return mostrarMensaje(msgForm, "⚠️ DNI inválido", "error");
+  if (dni.length !== 8) return mostrarMensaje(msgForm, "DNI inválido", "error");
 
-  mostrarMensaje(msgForm, "🔄 Consultando RENIEC...", "loading");
+  mostrarMensaje(msgForm, "Consultando RENIEC...", "loading");
   try {
     const res = await fetch("/api/reniec", {
       method: "POST",
@@ -144,10 +144,10 @@ async function buscarDNI() {
       apellidoM.value = d.apellido_materno || "";
       departamento.value = d.departamento || "";
       direccionCompleta.value = d.direccion_completa || "";
-      mostrarMensaje(msgForm, "✅ Persona encontrada.", "success");
-    } else mostrarMensaje(msgForm, "❌ No se encontró el DNI.", "error");
+      mostrarMensaje(msgForm, "Persona encontrada.", "success");
+    } else mostrarMensaje(msgForm, "No se encontró el DNI.", "error");
   } catch {
-    mostrarMensaje(msgForm, "❌ Error al consultar RENIEC.", "error");
+    mostrarMensaje(msgForm, "Error al consultar RENIEC.", "error");
   }
 }
 
@@ -168,7 +168,7 @@ async function guardarCliente(e) {
   // Procesar checkboxes
   const checks = document.querySelectorAll('.rate-check:checked');
   if (checks.length === 0) {
-    alert("⚠️ Seleccione al menos un tipo de tasa.");
+    alert("Seleccione al menos un tipo de tasa.");
     return;
   }
 
@@ -184,7 +184,7 @@ async function guardarCliente(e) {
 
   // Confirmación requerida
   const detalleTasasStr = bodyObj.tasas_detalle.map(t => `${t.tipo}: ${t.valor}%`).join(', ');
-  const msgConf = `📝 CONFIRMACIÓN DE CREACIÓN\n\n` +
+  const msgConf = `CONFIRMACIÓN DE CREACIÓN\n\n` +
     `Cliente: ${bodyObj.nombre} ${bodyObj.apellido_paterno}\n` +
     `Monto: S/ ${bodyObj.monto}\n` +
     `Tasas Aplicadas: ${detalleTasasStr}\n` +

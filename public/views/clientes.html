@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Clientes Naturales</title>
+  <link rel="stylesheet" href="/css/main.css">
   <link rel="stylesheet" href="/css/clientes.css">
 </head>
 
@@ -11,8 +12,8 @@
   <h2>Clientes Naturales</h2>
 
   <div class="tabs">
-    <div class="tab active" id="tab-lista">📋 Lista de usuarios</div>
-    <div class="tab" id="tab-crear">➕ Crear cliente</div>
+    <div class="tab active" id="tab-lista">Lista de usuarios</div>
+    <div class="tab" id="tab-crear">Crear cliente</div>
   </div>
 
   <!-- LISTA -->
@@ -58,7 +59,7 @@
       <label for="dni">DNI</label>
       <div class="input-group">
         <input type="text" id="dni" maxlength="8" required placeholder="Ej: 12345678">
-        <button type="button" id="buscarDNI">🔍</button>
+        <button type="button" id="buscarDNI">Buscar</button>
       </div>
 
       <label for="nombre">Nombre completo</label>
@@ -250,8 +251,8 @@
         Seleccione una o más tasas e ingrese sus respectivos porcentajes.
       </p>
 
-      <label for="fechaInicio">Fecha de inicio</label>
-      <input type="date" id="fechaInicio">
+      <label for="fechaInicio">Fecha de Inicio</label>
+      <input type="date" id="fechaInicio" required>
 
       <label for="plazo">Plazo (meses)</label>
       <input type="number" id="plazo" required min="2" max="199" step="1" placeholder="Ingrese entre 2 y 199">

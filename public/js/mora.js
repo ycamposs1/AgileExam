@@ -1,47 +1,82 @@
 async function cargarSimulacion() {
-    const tbody = document.getElementById("tablaMora");
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Cargando...</td></tr>';
+    const container = document.getElementById("moraContainer");
+    container.innerHTML = '<p style="text-align:center;">Cargando...</p>';
 
     try {
         const res = await fetch('/api/mora');
         const response = await res.json();
 
         if (!response.success) {
-            alert("Error cargando simulación: " + response.message);
+            container.innerHTML = `<p style="color:red; text-align:center;">Error: ${response.message}</p>`;
             return;
         }
 
         const data = response.data;
-        tbody.innerHTML = "";
+        container.innerHTML = "";
 
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No hay préstamos activos para simular.</td></tr>';
+            container.innerHTML = '<p style="text-align:center;">No hay préstamos activos para simular.</p>';
             return;
         }
 
+        // Group by DNI
+        const grouped = {};
         data.forEach(item => {
-            const warningStyle = item.isWarning ? 'background-color: #fff3cd;' : '';
-            const row = `
-        <tr style="${warningStyle}">
-          <td>
-            <strong>${item.nombre}</strong><br>
-            <small style="color:#666;">${item.dni}</small>
-          </td>
-          <td class="money">S/ ${item.deudaActual}</td>
-          <td style="text-align:center;">${item.plazoRestanteActual} meses</td>
-          <td style="text-align:center; font-weight:bold; color:orange;">${item.mesesAtraso}</td>
-          <td style="text-align:center; font-weight:bold; color:#d9534f;">${item.plazoSimulado} meses</td>
-          <td class="money" style="color:#d9534f;">+ S/ ${item.moraGenerada}</td>
-          <td class="money" style="font-weight:bold;">S/ ${item.nuevaCuotaMensual}</td>
-          <td class="money" style="font-weight:bold; color:#d9534f;">S/ ${item.nuevaDeudaTotal}</td>
-        </tr>
-      `;
-            tbody.innerHTML += row;
+            if (!grouped[item.dni]) {
+                grouped[item.dni] = {
+                    nombre: item.nombre,
+                    dni: item.dni,
+                    scenarios: []
+                };
+            }
+            grouped[item.dni].scenarios.push(item);
+        });
+
+        // Render groups
+        Object.values(grouped).forEach(client => {
+            const details = document.createElement('details');
+
+            // Summary Header
+            details.innerHTML = `
+                <summary>
+                    <span>${client.nombre} <small>(${client.dni})</small></span>
+                    <span style="font-size:0.8em; color:#666; margin-right:10px;">${client.scenarios.length} Escenarios</span>
+                </summary>
+                <div class="mora-content">
+                    <table class="mini-table">
+                        <thead>
+                            <tr>
+                                <th>Atraso</th>
+                                <th>Deuda Actual</th>
+                                <th>Rest. Actual</th>
+                                <th>Rest. Simulado</th>
+                                <th>Mora (1%)</th>
+                                <th>Nueva Cuota</th>
+                                <th>Nueva Deuda</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${client.scenarios.map(sc => `
+                                <tr style="${sc.isWarning ? 'background-color:#fff3cd' : ''}">
+                                    <td style="font-weight:bold; color:orange;">${sc.mesesAtraso} mes(es)</td>
+                                    <td>S/ ${sc.deudaActual}</td>
+                                    <td>${sc.plazoRestanteActual} meses</td>
+                                    <td style="font-weight:bold; color:#d9534f;">${sc.plazoSimulado} meses</td>
+                                    <td style="color:#d9534f;">+ S/ ${sc.moraGenerada}</td>
+                                    <td style="font-weight:bold;">S/ ${sc.nuevaCuotaMensual}</td>
+                                    <td style="font-weight:bold; color:#d9534f;">S/ ${sc.nuevaDeudaTotal}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            container.appendChild(details);
         });
 
     } catch (err) {
         console.error(err);
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:red;">Error de conexión.</td></tr>';
+        container.innerHTML = '<p style="color:red; text-align:center;">Error de conexión.</p>';
     }
 }
 

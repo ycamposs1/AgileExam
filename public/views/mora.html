@@ -4,94 +4,20 @@
 <head>
     <meta charset="UTF-8">
     <title>Simulador de Mora</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            background-color: #f4f7f6;
-        }
-
-        h2 {
-            color: #333;
-        }
-
-        .toolbar {
-            margin-bottom: 20px;
-        }
-
-        button {
-            background: #007bff;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background: #0056b3;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            margin-top: 10px;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        th,
-        td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-
-        th {
-            background: #d9534f;
-            color: white;
-        }
-
-        tr:hover {
-            background: #f1f1f1;
-        }
-
-        .money {
-            text-align: right;
-            font-family: monospace;
-        }
-    </style>
+    <link rel="stylesheet" href="/css/main.css">
 </head>
 
 <body>
 
-    <h2>⚠️ Simulador de Mora (Escenario: 1 Mes de Atraso)</h2>
+    <h2>Simulador de Mora (Escenario: 1 Mes de Atraso)</h2>
 
     <div class="toolbar">
-        <button onclick="cargarSimulacion()">🔄 Recargar Simulación</button>
+        <button class="btn btn-primary" onclick="cargarSimulacion()">Recargar Simulación</button>
     </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Cliente</th>
-                <th>Deuda Actual (S/)</th>
-                <th>Plazo Restante Actual</th>
-                <th>Atraso (Meses)</th>
-                <th>Plazo Simulado</th>
-                <th>Mora 1% (S/)</th>
-                <th>Nueva Cuota Mensual (S/)</th>
-                <th>Nueva Deuda Total (S/)</th>
-            </tr>
-        </thead>
-        <tbody id="tablaMora">
-            <tr>
-                <td colspan="7" style="text-align:center;">Cargando...</td>
-            </tr>
-        </tbody>
-    </table>
+    <div id="moraContainer">
+        <p class="text-center">Cargando...</p>
+    </div>
 
     <script src="/js/mora.js"></script>
 </body>

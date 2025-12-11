@@ -5,6 +5,7 @@ const fs = require('fs');
 require('dotenv').config();
 const sgMail = require('@sendgrid/mail');
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+const cajaController = require('./cajaController');
 
 
 // =======================================================
@@ -198,7 +199,6 @@ exports.obtenerClientePorDni = (req, res) => {
       IFNULL(p.monto, 0) AS monto, 
       IFNULL(p.plazo, 0) AS plazo,
       IFNULL(p.fecha_inicio, '') AS fecha_inicio, 
-      IFNULL(p.fecha_fin, '') AS fecha_fin,
       IFNULL(p.tipo_tasa, 'TEA') AS tipo_tasa,
       p.tasas_detalle,
       p.tasas_detalle,
@@ -208,42 +208,98 @@ exports.obtenerClientePorDni = (req, res) => {
     FROM clientes c
     LEFT JOIN prestamos p ON c.id = p.id_cliente
     WHERE c.dni = ? AND (p.saldo_pendiente IS NULL OR p.saldo_pendiente > 0.01)
-    ORDER BY p.id DESC
+    ORDER BY p.id DESC LIMIT 1
   `;
 
   db.get(query, [dni], (err, row) => {
     if (err) {
-      console.error("Error obteniendo detalle:", err);
-      return res.status(500).json({ success: false, message: "Error al obtener detalle." });
+      console.error(err);
+      return res.status(500).json({ success: false, message: "Error al buscar cliente." });
     }
 
     if (!row) {
       return res.status(404).json({ success: false, message: "Cliente no encontrado." });
     }
 
-    // 🔸 Obtener historial de pagos recientes (SOLO del préstamo actual)
-    if (row.id_prestamo) {
-      db.all(
-        `SELECT fecha, tipo, monto, descripcion FROM actividad WHERE id_prestamo = ? ORDER BY id DESC LIMIT 10`,
-        [row.id_prestamo],
-        (err2, rowsActividad) => {
-          if (err2) console.error("Error obteniendo historial:", err2);
+    // 🔸 CÁLCULO DE MORA REAL
+    let mora = 0;
+    let diasAtraso = 0;
+    let mesesAtraso = 0;
 
-          res.json({
-            success: true,
-            cliente: row,
-            historial: rowsActividad || []
-          });
+    if (row.id_prestamo && row.fecha_inicio) {
+      const fechaInicio = new Date(row.fecha_inicio);
+      const hoy = new Date();
+
+      // Calculate months elapsed roughly
+      let monthsElapsed = (hoy.getFullYear() - fechaInicio.getFullYear()) * 12 + (hoy.getMonth() - fechaInicio.getMonth());
+      if (hoy.getDate() < fechaInicio.getDate()) monthsElapsed--;
+
+      // Calculate Expected Payments vs Actual Payments? 
+      // Logic: Compare "Months Elapsed" vs "Cuotas Pagadas"?
+      // Simpler for now (as per user request): Just apply mora based on time elapsed if they haven't paid "up to date".
+      // But we don't track "paid up to date" easily without checking 'actividad'.
+
+      // Simplified Logic: 
+      // If (monthsElapsed > 0), check if last payment matches current month?
+      // User said: "if a client didn't pay anything in their first month... apply mora".
+
+      // Let's count how many "Pago de Cuota" activities exist for this loan.
+      db.get(`SELECT COUNT(*) as count FROM actividad WHERE id_prestamo = ? AND tipo = 'Pago de Cuota'`, [row.id_prestamo], (errCount, rowCount) => {
+        const cuotasPagadas = rowCount ? rowCount.count : 0;
+
+        // Expected Cuotas = Months Elapsed
+        // Delay = Months Elapsed - Cuotas Pagadas
+        let delay = monthsElapsed - cuotasPagadas;
+        if (delay < 0) delay = 0; // Paid in advance
+
+        // If today is past the 'payment day' of the month? Assumed yes if month elapsed.
+
+        if (delay > 0) {
+          // Calculate Mora: 1% of Current Debt per month of delay
+          // Note: 'saldo_pendiente' is the current debt.
+          const deudaBase = row.saldo_pendiente;
+          mora = deudaBase * 0.01 * delay;
+          mesesAtraso = delay;
+
+          // Add Mora to saldo_pendiente for display? 
+          // Or keep separate? Frontend expects 'saldo_pendiente'.
+          // Let's update `saldo_pendiente` in the response (not DB, just display).
+          row.saldo_pendiente += mora;
+          row.tieneMora = true;
+          row.moraMonto = mora;
+          row.mesesAtraso = mesesAtraso;
         }
-      );
-    } else {
-      // Si no hay préstamo activo, retornar vacío o historial general?
-      // El usuario pidió solo cuotas que ya pagó (del prestamo activo asumimos).
-      res.json({
-        success: true,
-        cliente: row,
-        historial: []
+
+        // 🔸 Obtener historial (Existing Code)
+        fetchHistory(row);
       });
+
+    } else {
+      fetchHistory(row);
+    }
+
+    function fetchHistory(clientData) {
+      if (clientData.id_prestamo) {
+        db.all(
+          `SELECT fecha, tipo, monto, descripcion FROM actividad WHERE id_prestamo = ? ORDER BY id DESC LIMIT 10`,
+          [clientData.id_prestamo],
+          (err2, rowsActividad) => {
+            if (err2) console.error("Error obteniendo historial:", err2);
+
+            res.json({
+              success: true,
+              cliente: clientData,
+              historial: rowsActividad || []
+            });
+          }
+        );
+      } else {
+        res.json({
+          success: true,
+          cliente: clientData,
+          historial: []
+        });
+      }
     }
   });
 };
@@ -251,8 +307,9 @@ exports.obtenerClientePorDni = (req, res) => {
 
 
 exports.crearCliente = (req, res) => {
+  console.log("📥 crearCliente Payload:", req.body);
   try {
-    const {
+    let { // Changed to let to allow reassignment of fecha_inicio
       dni,
       email,
       nombre,
@@ -273,6 +330,20 @@ exports.crearCliente = (req, res) => {
       origen,      // solo si pep
       destino      // solo si pep
     } = req.body;
+
+    // 🔸 Validar fecha de inicio (Backdating)
+    let fechaInicioDate;
+    if (req.body.fecha_inicio) {
+      fechaInicioDate = new Date(req.body.fecha_inicio + "T12:00:00"); // Force mid-day to avoid timezone shifting
+    } else {
+      fechaInicioDate = new Date();
+    }
+
+    if (isNaN(fechaInicioDate.getTime())) {
+      return res.status(400).json({ success: false, message: "Fecha de inicio inválida." });
+    }
+
+    fecha_inicio = fechaInicioDate.toISOString().split('T')[0]; // Reassign validated date
 
     // =========================
     // 🔸 Validación de campos
@@ -421,6 +492,10 @@ exports.crearCliente = (req, res) => {
 
                 const idPrestamo = this.lastID;
                 console.log(`✅ Préstamo registrado (ID: ${idPrestamo})`);
+
+                // 🔸 Registrar Movimiento de Caja (EGRESO)
+                cajaController.registrarMovimientoInternal('EGRESO', monto, `Préstamo a ${nombre} (${dni})`, idPrestamo)
+                  .catch(errCaja => console.error("⚠️ Error registrando caja:", errCaja));
 
                 // 2. Registrar Actividad (Préstamo otorgado)
                 const now = new Date();
@@ -594,7 +669,7 @@ exports.registrarPago = (req, res) => {
         let descripcion = "";
         let destinoFondo = "";
 
-        // � BRANCH A: LIQUIDACIÓN TOTAL (Si alcanza el dinero)
+        // 🚨 BRANCH A: LIQUIDACIÓN TOTAL (Si alcanza el dinero)
         // Usamos una pequeña tolerancia (0.50)
         if (dineroDisponible >= (deudaTotalBruta - 0.50)) {
           // ¡Paga todo!
@@ -630,7 +705,6 @@ exports.registrarPago = (req, res) => {
               // YES.
 
               // But 'finalizarTransaccion' logic takes 'montoPago' (from scope? No, it's not passed).
-              // Function 'finalizarTransaccion' uses the global 'desc' and 'tipo' vars but what about amount?
               // I need to check 'finalizarTransaccion' implementation.
               // It likely uses 'montoPago' variable from closure.
 
@@ -692,36 +766,6 @@ exports.registrarPago = (req, res) => {
             String(now.getSeconds()).padStart(2, '0');
 
           // Insert Actividad
-          db.run(`INSERT INTO actividad (fecha, tipo, monto, descripcion, dni_cliente, id_cliente) VALUES (?, ?, ?, ?, ?, ?)`,
-            [fecha, tipo, montoReal, desc, dni, prestamo.id_cliente],
-            function (errAct) {
-              if (errAct) console.error(errAct);
-              // Pass ID back for receipt
-              const lastID = this.lastID;
-
-              if (afectarFondos) {
-                db.run(`UPDATE fondos SET monto_total = monto_total + ?`, [montoReal], (errF) => {
-                  if (errF) console.error(errF);
-                  commitAndRespond(lastID);
-                });
-              } else {
-                commitAndRespond(lastID);
-              }
-            }
-          );
-        }
-
-        // --- HELPER WRAPPER ---
-        function finalizarTransaccion(tipo, desc, afectarFondos, montoReal) {
-          const now = new Date();
-          const fecha = now.getFullYear() + '-' +
-            String(now.getMonth() + 1).padStart(2, '0') + '-' +
-            String(now.getDate()).padStart(2, '0') + ' ' +
-            String(now.getHours()).padStart(2, '0') + ':' +
-            String(now.getMinutes()).padStart(2, '0') + ':' +
-            String(now.getSeconds()).padStart(2, '0');
-
-          // Insert Actividad
           db.run(`INSERT INTO actividad (fecha, id_prestamo, dni_cliente, tipo, monto, descripcion) VALUES (?, ?, ?, ?, ?, ?)`,
             [fecha, prestamo.id, dni, tipo, montoReal, desc],
             function (errAct) {
@@ -732,6 +776,10 @@ exports.registrarPago = (req, res) => {
               }
 
               const idActividad = this.lastID;
+
+              // 🔸 Registrar Movimiento de Caja (INGRESO)
+              cajaController.registrarMovimientoInternal('INGRESO', montoReal, `${desc} - ${dni}`, idActividad)
+                .catch(errCaja => console.error("⚠️ Error registrando ingreso en caja:", errCaja));
 
               if (afectarFondos) {
                 db.run(`UPDATE fondos SET monto_total = monto_total + ?`, [montoReal], (errF) => {
