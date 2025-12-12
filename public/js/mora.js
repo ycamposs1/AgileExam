@@ -1,13 +1,13 @@
 async function cargarSimulacion() {
     const container = document.getElementById("moraContainer");
-    container.innerHTML = '<p style="text-align:center;">Cargando...</p>';
+    container.innerHTML = '<p class="text-center">Cargando simulación...</p>';
 
     try {
         const res = await fetch('/api/mora');
         const response = await res.json();
 
         if (!response.success) {
-            container.innerHTML = `<p style="color:red; text-align:center;">Error: ${response.message}</p>`;
+            container.innerHTML = `<p class="alert alert-error">Error: ${response.message}</p>`;
             return;
         }
 
@@ -15,70 +15,64 @@ async function cargarSimulacion() {
         container.innerHTML = "";
 
         if (data.length === 0) {
-            container.innerHTML = '<p style="text-align:center;">No hay préstamos activos para simular.</p>';
+            container.innerHTML = '<p class="text-center">No hay préstamos activos para simular.</p>';
             return;
         }
 
-        // Group by DNI
-        const grouped = {};
-        data.forEach(item => {
-            if (!grouped[item.dni]) {
-                grouped[item.dni] = {
-                    nombre: item.nombre,
-                    dni: item.dni,
-                    scenarios: []
-                };
-            }
-            grouped[item.dni].scenarios.push(item);
-        });
+        data.forEach(client => {
+            const clientSection = document.createElement('div');
+            clientSection.className = 'card';
+            clientSection.innerHTML = `<h3>${client.cliente} <small>(${client.dni})</small></h3>`;
 
-        // Render groups
-        Object.values(grouped).forEach(client => {
-            const details = document.createElement('details');
-
-            // Summary Header
-            details.innerHTML = `
-                <summary>
-                    <span>${client.nombre} <small>(${client.dni})</small></span>
-                    <span style="font-size:0.8em; color:#666; margin-right:10px;">${client.scenarios.length} Escenarios</span>
-                </summary>
-                <div class="mora-content">
-                    <table class="mini-table">
-                        <thead>
-                            <tr>
-                                <th>Atraso</th>
-                                <th>Deuda Actual</th>
-                                <th>Rest. Actual</th>
-                                <th>Rest. Simulado</th>
-                                <th>Mora (1%)</th>
-                                <th>Nueva Cuota</th>
-                                <th>Nueva Deuda</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${client.scenarios.map(sc => `
-                                <tr style="${sc.isWarning ? 'background-color:#fff3cd' : ''}">
-                                    <td style="font-weight:bold; color:orange;">${sc.mesesAtraso} mes(es)</td>
-                                    <td>S/ ${sc.deudaActual}</td>
-                                    <td>${sc.plazoRestanteActual} meses</td>
-                                    <td style="font-weight:bold; color:#d9534f;">${sc.plazoSimulado} meses</td>
-                                    <td style="color:#d9534f;">+ S/ ${sc.moraGenerada}</td>
-                                    <td style="font-weight:bold;">S/ ${sc.nuevaCuotaMensual}</td>
-                                    <td style="font-weight:bold; color:#d9534f;">S/ ${sc.nuevaDeudaTotal}</td>
+            client.scenarios.forEach(scenario => {
+                const details = document.createElement('details');
+                details.innerHTML = `
+                    <summary>
+                        <span>${scenario.nombre}</span>
+                    </summary>
+                    <div class="mora-content">
+                        <table class="mini-table">
+                            <thead>
+                                <tr>
+                                    <th>Mes</th>
+                                    <th>Saldo Ini</th>
+                                    <th>Interés</th>
+                                    <th>Mora (1%)</th>
+                                    <th>Total Cargo</th>
+                                    <th>Pago</th>
+                                    <th>Nuevo Saldo</th>
+                                    <th>Cuota</th>
+                                    <th>Estado</th>
                                 </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-            container.appendChild(details);
+                            </thead>
+                            <tbody>
+                                ${scenario.detalle.map(row => `
+                                    <tr style="${row.estado === 'NO PAGADO' ? 'background: #fff3cd;' : ''}">
+                                        <td>${row.mes}</td>
+                                        <td>${row.saldoInicial}</td>
+                                        <td>${row.interes}</td>
+                                        <td style="color:${row.mora > 0 ? 'red' : 'inherit'}">${row.mora}</td>
+                                        <td>${row.totalCargo}</td>
+                                        <td>${row.pagoRealizado}</td>
+                                        <td>${row.nuevoSaldo}</td>
+                                        <td>${row.cuotaFutura}</td>
+                                        <td>${row.estado}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                clientSection.appendChild(details);
+            });
+
+            container.appendChild(clientSection);
         });
 
     } catch (err) {
         console.error(err);
-        container.innerHTML = '<p style="color:red; text-align:center;">Error de conexión.</p>';
+        container.innerHTML = '<p class="alert alert-error">Error de conexión.</p>';
     }
 }
 
-// Cargar al inicio
 document.addEventListener("DOMContentLoaded", cargarSimulacion);
